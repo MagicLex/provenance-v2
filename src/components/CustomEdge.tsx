@@ -38,10 +38,23 @@ const CustomEdge = ({
   const count = data?.count;
   const isAggregated = count && count > 1;
   
-  // Change stroke color and style based on connection type
+  // Get whether this edge is highlighted
+  const isHighlighted = data?.isHighlighted;
+  
+  // Change stroke color and style based on connection type and highlight status
   const getStrokeStyle = () => {
     // Use edge ID to get a deterministic but varied opacity
     const opacity = 0.7 + (edgeIdHash % 30) / 100;
+    
+    // If the edge is highlighted, give it special styling
+    if (isHighlighted) {
+      return {
+        strokeWidth: 3,
+        stroke: '#FF5722', // Bright orange for highlighting
+        filter: 'drop-shadow(0 0 5px rgba(255, 87, 34, 0.5))',
+        strokeDasharray: isDerivedConnection ? '8 4' : undefined
+      };
+    }
     
     if (isAggregated) {
       return {

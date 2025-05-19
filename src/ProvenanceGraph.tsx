@@ -31,6 +31,7 @@ import CollapsedGroupNode from './components/CollapsedGroupNode';
 import GroupControls from './components/GroupControls';
 import CustomEdge from './components/CustomEdge';
 import NodeTooltip from './components/NodeTooltip';
+import TracingControls from './components/TracingControls';
 
 import './ProvenanceGraph.css';
 
@@ -78,6 +79,11 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
   const [tooltipData, setTooltipData] = useState<HopsworksNode | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   
+  // State for connection highlighting
+  const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
+  const [highlightedNodes, setHighlightedNodes] = useState<Set<string>>(new Set());
+  const [highlightedEdges, setHighlightedEdges] = useState<Set<string>>(new Set());
+  
   // Use the group state hook for collapsible groups
   const { groupState, toggleGroup, visibleNodes, visibleEdges } = useGroupState(
     data.nodes,
@@ -98,6 +104,81 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
       .filter(edge => edge.source === nodeId)
       .map(edge => edge.target);
   }, []);
+  
+  // Function to trace connections through the graph
+  const traceConnections = useCallback((nodeId: string | null, direction: 'upstream' | 'downstream' | 'both') => {
+    if (!nodeId) {
+      // Clear highlights if no node selected
+      setHighlightedNodes(new Set());
+      setHighlightedEdges(new Set());
+      return;
+    }
+    
+    const connectedNodes = new Set<string>([nodeId]);
+    const connectedEdges = new Set<string>();
+    
+    // Recursively find all upstream nodes (parents)
+    const findAllUpstream = (currentNodeId: string, edges: Edge[], visited = new Set<string>()) => {
+      if (visited.has(currentNodeId)) return;
+      visited.add(currentNodeId);
+      
+      const parents = findParentNodes(currentNodeId, edges);
+      
+      parents.forEach(parentId => {
+        connectedNodes.add(parentId);
+        
+        // Find and add the edge between parent and current node
+        const edge = edges.find(e => e.source === parentId && e.target === currentNodeId);
+        if (edge) connectedEdges.add(edge.id);
+        
+        // Continue recursively
+        findAllUpstream(parentId, edges, visited);
+      });
+    };
+    
+    // Recursively find all downstream nodes (children)
+    const findAllDownstream = (currentNodeId: string, edges: Edge[], visited = new Set<string>()) => {
+      if (visited.has(currentNodeId)) return;
+      visited.add(currentNodeId);
+      
+      const children = findChildNodes(currentNodeId, edges);
+      
+      children.forEach(childId => {
+        connectedNodes.add(childId);
+        
+        // Find and add the edge between current node and child
+        const edge = edges.find(e => e.source === currentNodeId && e.target === childId);
+        if (edge) connectedEdges.add(edge.id);
+        
+        // Continue recursively
+        findAllDownstream(childId, edges, visited);
+      });
+    };
+    
+    // Trace in the requested direction(s)
+    if (direction === 'upstream' || direction === 'both') {
+      findAllUpstream(nodeId, visibleEdges);
+    }
+    
+    if (direction === 'downstream' || direction === 'both') {
+      findAllDownstream(nodeId, visibleEdges);
+    }
+    
+    setHighlightedNodes(connectedNodes);
+    setHighlightedEdges(connectedEdges);
+    
+  }, [findParentNodes, findChildNodes, visibleEdges]);
+
+  // Add highlighting classes to nodes
+  const applyNodeHighlighting = useCallback((nodes: Node[]) => {
+    return nodes.map(node => {
+      const isHighlighted = highlightedNodes.has(node.id);
+      return {
+        ...node,
+        className: `${node.className || ''} ${isHighlighted ? 'highlighted' : ''}`.trim()
+      };
+    });
+  }, [highlightedNodes]);
 
   // Transform nodes with positions using hierarchical layout
   const layoutNodes = useMemo(() => {
@@ -155,7 +236,7 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
           ...node,
           position: { 
             x: 400, // Center position 
-            y: layerPositions[nodeType] || 0
+            y: layerPositionsRange[nodeType]?.base || 0
           },
           data: {
             ...node,
@@ -166,6 +247,7 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
             boxShadow: '0 4px 10px rgba(0, 0, 0, 0.15)',
             transform: 'scale(1.05)',
             zIndex: 10,
+            opacity: highlightedNodes.size > 0 ? 0.25 : 1,
           },
         };
       }
@@ -246,12 +328,15 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
           width: 200,
           boxShadow: '0 3px 8px rgba(0, 0, 0, 0.1)',
           transition: 'all 0.2s ease-in-out',
+          opacity: highlightedNodes.size > 0 && !highlightedNodes.has(node.id) ? 0.25 : 1,
+          filter: highlightedNodes.has(node.id) ? 'drop-shadow(0 0 10px rgba(66, 133, 244, 0.5))' : 'none',
+          zIndex: highlightedNodes.has(node.id) ? 10 : 0,
         },
       };
     });
   }, [visibleNodes, visibleEdges, toggleGroup]);
   
-  // Transform edges to use custom edge type with derived connections
+  // Transform edges to use custom edge type with derived connections and highlighting
   const layoutEdges = useMemo(() => {
     return visibleEdges.map(edge => {
       // Check if this is a derived connection
@@ -264,22 +349,34 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
       // Special handling for aggregated edges
       const isAggregated = edge.data?.count && edge.data.count > 1;
       
+      // Check if this edge is highlighted
+      const isHighlighted = highlightedEdges.has(edge.id);
+      
+      // Determine edge animation based on highlighting and type
+      const animated = isHighlighted;
+      
       return {
         ...edge,
         type: 'custom', // Use our custom edge component
-        animated: false,
+        animated,
+        style: {
+          ...edge.style,
+          opacity: highlightedEdges.size > 0 && !isHighlighted ? 0.15 : 1,
+          zIndex: isHighlighted ? 1000 : 0,
+        },
         data: {
           ...edge.data,
           isDerived, // Add this property to be used in CustomEdge
+          isHighlighted,
         },
         markerEnd: {
           type: MarkerType.ArrowClosed,
-          width: isDerived ? 22 : 20,
-          height: isDerived ? 22 : 20,
+          width: (isDerived || isHighlighted) ? 22 : 20,
+          height: (isDerived || isHighlighted) ? 22 : 20,
         },
       };
     });
-  }, [visibleEdges]);
+  }, [visibleEdges, highlightedEdges]);
 
   // Node interactions
   const handleNodeMouseEnter = useCallback((event: React.MouseEvent, node: Node) => {
@@ -296,8 +393,20 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
   }, []);
 
   const handleNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
+    // Toggle highlighting when a node is clicked
+    if (highlightedNodeId === node.id) {
+      // Clear highlighting if the same node is clicked again
+      setHighlightedNodeId(null);
+      traceConnections(null, 'both');
+    } else {
+      // Highlight connections for this node
+      setHighlightedNodeId(node.id);
+      traceConnections(node.id, 'both');
+    }
+    
+    // Also call the external handler if provided
     onNodeClick?.(node);
-  }, [onNodeClick]);
+  }, [onNodeClick, highlightedNodeId, traceConnections]);
 
   return (
     <div className="provenance-graph-container">
@@ -306,10 +415,24 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
           groupState={groupState}
           toggleGroup={toggleGroup}
         />
+        
+        {highlightedNodeId && (
+          <TracingControls
+            nodeId={highlightedNodeId}
+            onTraceUpstream={() => traceConnections(highlightedNodeId, 'upstream')}
+            onTraceDownstream={() => traceConnections(highlightedNodeId, 'downstream')}
+            onTraceBoth={() => traceConnections(highlightedNodeId, 'both')}
+            onClearTrace={() => {
+              setHighlightedNodeId(null);
+              setHighlightedNodes(new Set());
+              setHighlightedEdges(new Set());
+            }}
+          />
+        )}
       </div>
       <div className="flow-wrapper">
         <ReactFlow
-          nodes={layoutNodes}
+          nodes={applyNodeHighlighting(layoutNodes)}
           edges={layoutEdges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
