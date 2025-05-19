@@ -1,0 +1,24 @@
+{
+  "name": "hopsworks-provenance-graph",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A React component for visualizing Hopsworks feature store provenance with collapsible groups",
+  "main": "src/index.tsx",
+  "scripts": {
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "reactflow": "^11.10.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.15",
+    "@types/react-dom": "^18.2.7",
+    "@vitejs/plugin-react": "^4.0.3",
+    "typescript": "^5.0.4",
+    "vite": "^4.4.5"
+  }
+}
