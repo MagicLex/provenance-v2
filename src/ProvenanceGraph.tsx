@@ -58,14 +58,14 @@ interface ProvenanceGraphProps {
   onNodeClick?: (node: Node) => void;
 }
 
-// Base vertical positions for each layer type
-const layerPositions: Record<string, number> = {
-  source: 0,
-  featureGroup: 200,
-  featureView: 400,
-  trainingDataset: 600,
-  model: 800,
-  deployment: 1000,
+// Base vertical positions for each layer type with some flexibility
+const layerPositionsRange: Record<string, {base: number, variance: number}> = {
+  source: { base: 0, variance: 40 },
+  featureGroup: { base: 200, variance: 60 },
+  featureView: { base: 400, variance: 40 },
+  trainingDataset: { base: 600, variance: 80 },
+  model: { base: 800, variance: 100 },
+  deployment: { base: 1000, variance: 60 },
 };
 
 const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({ 
@@ -163,6 +163,9 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
           },
           style: {
             width: 250,
+            boxShadow: '0 4px 10px rgba(0, 0, 0, 0.15)',
+            transform: 'scale(1.05)',
+            zIndex: 10,
           },
         };
       }
@@ -182,38 +185,51 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
         nodeType === 'featureGroup' && 
         (node.id === 'fg-4' || node.id === 'fg-5');
       
-      // Base vertical position based on node type
-      let yPosition = layerPositions[nodeType] || 0;
+      // Get layer positioning info
+      const layerInfo = layerPositionsRange[nodeType] || { base: 0, variance: 0 };
       
-      // Calculate horizontal position
+      // Create a deterministic but seemingly random offset for this node
+      // Use the node ID as a seed to ensure consistent positioning
+      const nodeIdHash = node.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const randomOffset = (nodeIdHash % 100) / 100; // Between 0 and 1
+      
+      // Base vertical position based on node type with organic variance
+      let yPosition = layerInfo.base + (randomOffset * layerInfo.variance * 2 - layerInfo.variance);
+      
+      // Calculate horizontal position with organic offset
       let xPosition;
+      const horizOffset = Math.sin(nodeIdHash) * 30; // Small horizontal jitter based on node ID
       
       if (isDerivedFeatureGroup) {
-        // Position derived feature groups in a second row
-        yPosition += 120;
+        // Position derived feature groups below their parent groups with some organic feel
+        yPosition += 120 + (randomOffset * 40 - 20);
         
-        // If it's fg-4, position it below fg-1 and fg-2 (its parents)
+        // If it's fg-4, position it below fg-1 and fg-2 (its parents) with slight offset
         if (node.id === 'fg-4') {
-          xPosition = 300; // Between its parents
+          // Find midpoint between parents with organic offset
+          xPosition = 300 + horizOffset; 
         } 
-        // If it's fg-5, position it below fg-1 and fg-3 (its parents)
+        // If it's fg-5, position it below fg-1 and fg-3 (its parents) with slight offset
         else if (node.id === 'fg-5') {
-          xPosition = 600; // Between its parents
+          xPosition = 600 + horizOffset;
         }
       } else {
-        // Position regular nodes based on their index
-        xPosition = nodeIndex * 300;
+        // Base position with node index
+        const baseX = nodeIndex * 300;
         
-        // Adjust positions for specific node types to better show relationships
+        // Add some organic variance for regular nodes
+        xPosition = baseX + horizOffset;
+        
+        // Adjust positions for specific node types to maintain relationships but with organic feel
         if (nodeType === 'source') {
-          if (node.id === 'source-1') xPosition = 0;
-          else if (node.id === 'source-2') xPosition = 300;
-          else if (node.id === 'source-3') xPosition = 600;
+          if (node.id === 'source-1') xPosition = horizOffset;
+          else if (node.id === 'source-2') xPosition = 300 + horizOffset;
+          else if (node.id === 'source-3') xPosition = 600 + horizOffset;
         } 
         else if (nodeType === 'featureGroup' && !isDerivedFeatureGroup) {
-          if (node.id === 'fg-1') xPosition = 0;
-          else if (node.id === 'fg-2') xPosition = 300;
-          else if (node.id === 'fg-3') xPosition = 600;
+          if (node.id === 'fg-1') xPosition = 0 + horizOffset;
+          else if (node.id === 'fg-2') xPosition = 300 + horizOffset;
+          else if (node.id === 'fg-3') xPosition = 600 + horizOffset;
         }
       }
       
@@ -228,6 +244,8 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
         },
         style: {
           width: 200,
+          boxShadow: '0 3px 8px rgba(0, 0, 0, 0.1)',
+          transition: 'all 0.2s ease-in-out',
         },
       };
     });
@@ -310,8 +328,9 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
           />
           <Background
             variant="dots"
-            gap={12}
-            size={1}
+            gap={20}
+            size={1.5}
+            color="rgba(0, 0, 0, 0.03)"
           />
         </ReactFlow>
         {tooltipData && (

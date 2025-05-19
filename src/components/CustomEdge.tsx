@@ -17,8 +17,13 @@ const CustomEdge = ({
   // especially if the nodes are derived (to better show hierarchy)
   const isDerivedConnection = data?.isDerived;
   
-  // Increase the curvature for derived connections
-  const curvature = isDerivedConnection ? 0.5 : 0.25;
+  // Generate a slightly different curvature for each edge to make flow more organic
+  // Use the edge ID to create a deterministic random-like value
+  const edgeIdHash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const randomFactor = (edgeIdHash % 100) / 300; // Small random factor
+
+  // Increase the curvature for derived connections and add slight variation
+  const curvature = isDerivedConnection ? 0.5 + randomFactor : 0.25 + randomFactor;
   
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
@@ -35,24 +40,34 @@ const CustomEdge = ({
   
   // Change stroke color and style based on connection type
   const getStrokeStyle = () => {
+    // Use edge ID to get a deterministic but varied opacity
+    const opacity = 0.7 + (edgeIdHash % 30) / 100;
+    
     if (isAggregated) {
       return {
         strokeWidth: Math.min(Math.max(1, count / 10), 5),
-        stroke: '#6C8EBF',
-        strokeDasharray: '5 5'
+        stroke: `rgba(108, 142, 191, ${opacity})`,
+        strokeDasharray: '5 5',
+        filter: 'drop-shadow(0 0 1px rgba(108, 142, 191, 0.3))'
       };
     }
     
     if (isDerivedConnection) {
+      // Create slight color variations for derived edges
+      const hueShift = (edgeIdHash % 20) - 10; // -10 to +10 hue shift
       return {
         strokeWidth: 2,
-        stroke: '#82B366', // Green for derivation
+        stroke: `rgba(130, ${179 + hueShift}, ${102 + hueShift}, ${opacity})`, // Slightly varied green
+        filter: 'drop-shadow(0 0 2px rgba(130, 179, 102, 0.3))'
       };
     }
     
+    // For regular connections, add subtle variations
+    const blueVariation = (edgeIdHash % 30) - 15; // -15 to +15
     return {
       strokeWidth: 1.5,
-      stroke: '#6C8EBF', // Default blue color
+      stroke: `rgba(${108 + blueVariation}, ${142 + blueVariation}, ${191 + blueVariation}, ${opacity})`,
+      filter: 'drop-shadow(0 0 1px rgba(108, 142, 191, 0.2))'
     };
   };
 

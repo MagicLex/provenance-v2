@@ -22,17 +22,29 @@
 /* Node styling */
 .node {
   padding: 10px;
-  border-radius: 8px;
+  border-radius: 12px;
   min-width: 180px;
   background: white;
   border: 1px solid #e0e0e0;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  position: relative;
+  overflow: hidden;
 }
 
 .node:hover {
-  box-shadow: 0 6px 10px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
+  transform: translateY(-3px) scale(1.02);
+}
+
+.node::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 4px;
+  height: 100%;
+  opacity: 0.6;
 }
 
 .node-header {
@@ -82,9 +94,17 @@
   border-color: #b3d1ff;
 }
 
+.source-node::after {
+  background-color: #4285F4;
+}
+
 .feature-group-node {
   background-color: #f3f9f0;
   border-color: #c6e6b8;
+}
+
+.feature-group-node::after {
+  background-color: #34A853;
 }
 
 .feature-view-node {
@@ -92,9 +112,17 @@
   border-color: #ffe0b3;
 }
 
+.feature-view-node::after {
+  background-color: #FBBC05;
+}
+
 .training-dataset-node {
   background-color: #fff0f7;
   border-color: #ffb3d1;
+}
+
+.training-dataset-node::after {
+  background-color: #EA4335;
 }
 
 .model-node {
@@ -102,9 +130,17 @@
   border-color: #b3b3ff;
 }
 
+.model-node::after {
+  background-color: #673AB7;
+}
+
 .deployment-node {
   background-color: #f7f0ff;
   border-color: #d1b3ff;
+}
+
+.deployment-node::after {
+  background-color: #9C27B0;
 }
 
 .collapsed-group-node {
@@ -245,6 +281,7 @@
 
 .derived-edge {
   stroke-linecap: round;
+  filter: drop-shadow(0 0 2px rgba(130, 179, 102, 0.5));
   animation: pulse 2s infinite;
 }
 
@@ -257,6 +294,58 @@
   }
   100% {
     opacity: 0.6;
+  }
+}
+
+/* Subtle breathing animation for nodes */
+@keyframes breathing {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.01);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Apply subtle breathing animation to specific nodes with different timing */
+.source-node {
+  animation: breathing 12s infinite ease-in-out;
+}
+
+.feature-group-node {
+  animation: breathing 15s infinite ease-in-out;
+}
+
+.feature-view-node {
+  animation: breathing 18s infinite ease-in-out;
+}
+
+.training-dataset-node {
+  animation: breathing 20s infinite ease-in-out;
+}
+
+.model-node {
+  animation: breathing 16s infinite ease-in-out;
+}
+
+.deployment-node {
+  animation: breathing 14s infinite ease-in-out;
+}
+
+/* Make node color bars pulse subtly */
+.node::after {
+  animation: colorPulse 8s infinite alternate ease-in-out;
+}
+
+@keyframes colorPulse {
+  0% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0.8;
   }
 }
 
