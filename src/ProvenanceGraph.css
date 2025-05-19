@@ -34,14 +34,17 @@
 
 /* Highlight effect for traced connections */
 .react-flow__node.highlighted {
-  box-shadow: 0 0 0 2px #FF5722, 0 0 20px rgba(255, 87, 34, 0.4);
+  box-shadow: 0 0 0 2px #FF5722, 0 0 15px rgba(255, 87, 34, 0.6);
   z-index: 100;
-  transform: scale(1.05);
+  /* Use a transform that doesn't affect layout */
+  filter: brightness(1.1) contrast(1.05);
+  border-color: #FF5722;
+  border-width: 2px;
 }
 
 .node:hover {
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
-  transform: translateY(-3px) scale(1.02);
+  filter: brightness(1.05);
 }
 
 .node::after {
@@ -73,6 +76,66 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Filter button styling */
+.node-filter-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background-color: rgba(255, 255, 255, 0.7);
+  border: 1px solid #ddd;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  opacity: 0.7;
+  z-index: 10;
+}
+
+.node-filter-button:hover {
+  background-color: #FF5722;
+  color: white;
+  border-color: #FF5722;
+  opacity: 1;
+  box-shadow: 0 0 5px rgba(255, 87, 34, 0.5);
+}
+
+.node:hover .node-filter-button {
+  opacity: 1;
+}
+
+/* Reset filter button */
+.reset-filter-button {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  padding: 8px 16px;
+  background-color: #FF5722;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  opacity: 0.9;
+}
+
+.reset-filter-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  opacity: 1;
 }
 
 .node-content {
@@ -226,10 +289,10 @@
   flex-direction: column;
   padding: 15px;
   margin-top: 20px;
-  background-color: #fff9f0;
-  border: 1px solid #ffe0b3;
+  background-color: #fff3e0;
+  border: 2px solid #FF5722;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 3px 10px rgba(255, 87, 34, 0.2);
 }
 
 .tracing-header {
@@ -246,56 +309,63 @@
 }
 
 .tracing-node-id {
-  font-size: 13px;
-  color: #666;
-  margin-bottom: 10px;
+  font-size: 14px;
+  color: #333;
+  margin-bottom: 5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.tracing-node-label {
+  color: #666;
+  font-weight: normal;
+}
+
+.tracing-info {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 15px;
+  line-height: 1.4;
+  font-style: italic;
+  background-color: rgba(255, 87, 34, 0.05);
+  padding: 8px;
+  border-radius: 4px;
 }
 
 .tracing-buttons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  margin-top: 15px;
 }
 
 .tracing-button {
-  padding: 8px 12px;
-  background-color: white;
-  border: 1px solid #e0e0e0;
+  width: 100%;
+  padding: 10px 15px;
+  background-color: #FF5722;
+  color: white;
+  border: none;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
   transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
 .tracing-button:hover {
-  background-color: #f5f5f5;
-}
-
-.trace-upstream {
-  color: #4285F4;
-  border-color: #4285F4;
-}
-
-.trace-downstream {
-  color: #34A853;
-  border-color: #34A853;
-}
-
-.trace-both {
-  color: #673AB7;
-  border-color: #673AB7;
+  background-color: #E64A19;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
 }
 
 .clear-trace {
-  color: #EA4335;
-  border-color: #EA4335;
-  grid-column: span 2;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
 }
 
 .group-buttons {
@@ -368,7 +438,6 @@
 .derived-edge {
   stroke-linecap: round;
   filter: drop-shadow(0 0 2px rgba(130, 179, 102, 0.5));
-  animation: pulse 2s infinite;
 }
 
 @keyframes pulse {
@@ -383,71 +452,38 @@
   }
 }
 
-/* Subtle breathing animation for nodes */
-@keyframes breathing {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.01);
-  }
-  100% {
-    transform: scale(1);
-  }
+/* No animations to prevent layout shifts */
+.source-node, .feature-group-node, .feature-view-node, 
+.training-dataset-node, .model-node, .deployment-node {
+  transition: filter 0.3s ease, opacity 0.3s ease, box-shadow 0.3s ease;
 }
 
-/* Apply subtle breathing animation to specific nodes with different timing */
-.source-node {
-  animation: breathing 12s infinite ease-in-out;
-}
-
-.feature-group-node {
-  animation: breathing 15s infinite ease-in-out;
-}
-
-.feature-view-node {
-  animation: breathing 18s infinite ease-in-out;
-}
-
-.training-dataset-node {
-  animation: breathing 20s infinite ease-in-out;
-}
-
-.model-node {
-  animation: breathing 16s infinite ease-in-out;
-}
-
-.deployment-node {
-  animation: breathing 14s infinite ease-in-out;
-}
-
-/* Make node color bars pulse subtly */
+/* Static color bars with no animation */
 .node::after {
-  animation: colorPulse 8s infinite alternate ease-in-out;
+  opacity: 0.7;
 }
 
-@keyframes colorPulse {
-  0% {
-    opacity: 0.5;
-  }
-  100% {
-    opacity: 0.8;
-  }
-}
-
-/* Tooltip styling */
-.tooltip-container {
+/* Node Toolbar styling */
+.node-custom-toolbar {
+  background-color: white;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  max-width: 350px;
+  min-width: 250px;
   pointer-events: none;
+  display: none; /* Hide by default */
+}
+
+/* Show toolbar on node hover */
+.react-flow__node:hover .node-custom-toolbar {
+  display: block;
 }
 
 .node-tooltip {
   background-color: white;
   border-radius: 8px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
   padding: 12px;
-  max-width: 300px;
-  min-width: 200px;
-  z-index: 1000;
+  position: relative;
 }
 
 .tooltip-header {
@@ -464,6 +500,7 @@
   font-size: 16px;
   font-weight: 600;
   color: #333;
+  margin-top: 3px;
 }
 
 .tooltip-content {
@@ -486,6 +523,7 @@
   color: #333;
   text-align: right;
   word-break: break-word;
+  max-width: 60%;
 }
 
 .tooltip-nested {

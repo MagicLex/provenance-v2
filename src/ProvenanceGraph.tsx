@@ -30,7 +30,6 @@ import DeploymentNode from './components/DeploymentNode';
 import CollapsedGroupNode from './components/CollapsedGroupNode';
 import GroupControls from './components/GroupControls';
 import CustomEdge from './components/CustomEdge';
-import NodeTooltip from './components/NodeTooltip';
 import TracingControls from './components/TracingControls';
 
 import './ProvenanceGraph.css';
@@ -59,14 +58,14 @@ interface ProvenanceGraphProps {
   onNodeClick?: (node: Node) => void;
 }
 
-// Base vertical positions for each layer type with some flexibility
-const layerPositionsRange: Record<string, {base: number, variance: number}> = {
-  source: { base: 0, variance: 40 },
-  featureGroup: { base: 200, variance: 60 },
-  featureView: { base: 400, variance: 40 },
-  trainingDataset: { base: 600, variance: 80 },
-  model: { base: 800, variance: 100 },
-  deployment: { base: 1000, variance: 60 },
+// Base vertical positions for each layer type (fixed grid layout)
+const layerPositions: Record<string, number> = {
+  source: 0,
+  featureGroup: 200,
+  featureView: 400,
+  trainingDataset: 600,
+  model: 800,
+  deployment: 1000,
 };
 
 const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({ 
@@ -75,9 +74,7 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
 }) => {
   const reactFlowInstance = useReactFlow();
   
-  // State for tooltips
-  const [tooltipData, setTooltipData] = useState<HopsworksNode | null>(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  // We'll use ReactFlow's own tooltip functionality instead of custom tooltips
   
   // State for connection highlighting
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
@@ -106,13 +103,20 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
   }, []);
   
   // Function to trace connections through the graph
-  const traceConnections = useCallback((nodeId: string | null, direction: 'upstream' | 'downstream' | 'both') => {
+  const traceConnections = useCallback((nodeId: string | null) => {
     if (!nodeId) {
       // Clear highlights if no node selected
       setHighlightedNodes(new Set());
       setHighlightedEdges(new Set());
       return;
     }
+    
+    // Before tracing connections, expand any collapsed groups to show all nodes
+    Object.keys(groupState).forEach(group => {
+      if (groupState[group]) {
+        toggleGroup(group);
+      }
+    });
     
     const connectedNodes = new Set<string>([nodeId]);
     const connectedEdges = new Set<string>();
@@ -155,30 +159,63 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
       });
     };
     
-    // Trace in the requested direction(s)
-    if (direction === 'upstream' || direction === 'both') {
-      findAllUpstream(nodeId, visibleEdges);
-    }
-    
-    if (direction === 'downstream' || direction === 'both') {
-      findAllDownstream(nodeId, visibleEdges);
-    }
+    // Always trace both directions
+    findAllUpstream(nodeId, visibleEdges);
+    findAllDownstream(nodeId, visibleEdges);
     
     setHighlightedNodes(connectedNodes);
     setHighlightedEdges(connectedEdges);
     
-  }, [findParentNodes, findChildNodes, visibleEdges]);
+  }, [findParentNodes, findChildNodes, visibleEdges, groupState, toggleGroup]);
 
-  // Add highlighting classes to nodes
+  // Add highlighting classes to nodes and sort them for proper layering
   const applyNodeHighlighting = useCallback((nodes: Node[]) => {
-    return nodes.map(node => {
+    // First sort nodes by layer for proper rendering order
+    const sortedNodes = [...nodes].sort((a, b) => {
+      // Get node types
+      const aType = a.type === 'collapsedGroup' 
+        ? (a as any).data.group
+        : a.type;
+      const bType = b.type === 'collapsedGroup'
+        ? (b as any).data.group
+        : b.type;
+      
+      // Get layer positions
+      const aPos = layerPositions[aType] || 0;
+      const bPos = layerPositions[bType] || 0;
+      
+      // Sort by vertical position first
+      if (aPos !== bPos) return aPos - bPos;
+      
+      // Then by horizontal position for nodes in the same layer
+      return a.position.x - b.position.x;
+    });
+    
+    // Then apply the highlighting
+    return sortedNodes.map(node => {
       const isHighlighted = highlightedNodes.has(node.id);
       return {
         ...node,
         className: `${node.className || ''} ${isHighlighted ? 'highlighted' : ''}`.trim()
       };
     });
-  }, [highlightedNodes]);
+  }, [highlightedNodes, layerPositions]);
+
+  // Filter nodes based on connection tracing
+  const filteredNodes = useMemo(() => {
+    // If we have highlighted nodes, only show those
+    if (highlightedNodes.size > 0) {
+      return visibleNodes.filter(node => highlightedNodes.has(node.id));
+    }
+    // Otherwise show all nodes
+    return visibleNodes;
+  }, [visibleNodes, highlightedNodes]);
+
+  // Handle direct filtering button click
+  const handleFilterClick = useCallback((nodeId: string) => {
+    setHighlightedNodeId(nodeId);
+    traceConnections(nodeId);
+  }, [traceConnections]);
 
   // Transform nodes with positions using hierarchical layout
   const layoutNodes = useMemo(() => {
@@ -200,7 +237,7 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
     });
 
     // Step 3: Identify root nodes (nodes with no parents but have children)
-    const rootNodes = visibleNodes
+    const rootNodes = filteredNodes
       .filter(node => {
         const parents = parentsByNode.get(node.id) || [];
         const children = childrenByParent.get(node.id) || [];
@@ -225,7 +262,7 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
     rootNodes.forEach(nodeId => assignLevel(nodeId, 0));
 
     // Step 5: Position nodes based on their type and level
-    return visibleNodes.map(node => {
+    return filteredNodes.map(node => {
       const nodeType = node.type === 'collapsedGroup' 
         ? (node as CollapsedGroup).group 
         : node.type;
@@ -236,24 +273,24 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
           ...node,
           position: { 
             x: 400, // Center position 
-            y: layerPositionsRange[nodeType]?.base || 0
+            y: layerPositions[nodeType] || 0
           },
           data: {
             ...node,
             onExpand: toggleGroup,
+            onFilter: handleFilterClick,
           },
           style: {
             width: 250,
             boxShadow: '0 4px 10px rgba(0, 0, 0, 0.15)',
-            transform: 'scale(1.05)',
             zIndex: 10,
-            opacity: highlightedNodes.size > 0 ? 0.25 : 1,
+            opacity: highlightedNodes.size > 0 ? 0.6 : 1,
           },
         };
       }
 
       // Get all nodes of this type to determine x-position
-      const sameTypeNodes = visibleNodes.filter(n => {
+      const sameTypeNodes = filteredNodes.filter(n => {
         const nType = n.type === 'collapsedGroup' 
           ? (n as CollapsedGroup).group 
           : n.type;
@@ -267,51 +304,38 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
         nodeType === 'featureGroup' && 
         (node.id === 'fg-4' || node.id === 'fg-5');
       
-      // Get layer positioning info
-      const layerInfo = layerPositionsRange[nodeType] || { base: 0, variance: 0 };
+      // Base vertical position based on node type (fixed grid)
+      let yPosition = layerPositions[nodeType] || 0;
       
-      // Create a deterministic but seemingly random offset for this node
-      // Use the node ID as a seed to ensure consistent positioning
-      const nodeIdHash = node.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const randomOffset = (nodeIdHash % 100) / 100; // Between 0 and 1
-      
-      // Base vertical position based on node type with organic variance
-      let yPosition = layerInfo.base + (randomOffset * layerInfo.variance * 2 - layerInfo.variance);
-      
-      // Calculate horizontal position with organic offset
+      // Calculate horizontal position (strict grid)
       let xPosition;
-      const horizOffset = Math.sin(nodeIdHash) * 30; // Small horizontal jitter based on node ID
       
       if (isDerivedFeatureGroup) {
-        // Position derived feature groups below their parent groups with some organic feel
-        yPosition += 120 + (randomOffset * 40 - 20);
+        // Position derived feature groups below their parent groups
+        yPosition += 120;
         
-        // If it's fg-4, position it below fg-1 and fg-2 (its parents) with slight offset
+        // If it's fg-4, position it below fg-1 and fg-2 (its parents)
         if (node.id === 'fg-4') {
-          // Find midpoint between parents with organic offset
-          xPosition = 300 + horizOffset; 
+          xPosition = 300; // Between its parents
         } 
-        // If it's fg-5, position it below fg-1 and fg-3 (its parents) with slight offset
+        // If it's fg-5, position it below fg-1 and fg-3 (its parents)
         else if (node.id === 'fg-5') {
-          xPosition = 600 + horizOffset;
+          xPosition = 600; // Between its parents
         }
       } else {
-        // Base position with node index
-        const baseX = nodeIndex * 300;
+        // Position regular nodes based on their index
+        xPosition = nodeIndex * 300;
         
-        // Add some organic variance for regular nodes
-        xPosition = baseX + horizOffset;
-        
-        // Adjust positions for specific node types to maintain relationships but with organic feel
+        // Adjust positions for specific node types
         if (nodeType === 'source') {
-          if (node.id === 'source-1') xPosition = horizOffset;
-          else if (node.id === 'source-2') xPosition = 300 + horizOffset;
-          else if (node.id === 'source-3') xPosition = 600 + horizOffset;
+          if (node.id === 'source-1') xPosition = 0;
+          else if (node.id === 'source-2') xPosition = 300;
+          else if (node.id === 'source-3') xPosition = 600;
         } 
         else if (nodeType === 'featureGroup' && !isDerivedFeatureGroup) {
-          if (node.id === 'fg-1') xPosition = 0 + horizOffset;
-          else if (node.id === 'fg-2') xPosition = 300 + horizOffset;
-          else if (node.id === 'fg-3') xPosition = 600 + horizOffset;
+          if (node.id === 'fg-1') xPosition = 0;
+          else if (node.id === 'fg-2') xPosition = 300;
+          else if (node.id === 'fg-3') xPosition = 600;
         }
       }
       
@@ -323,22 +347,34 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
         },
         data: {
           ...node,
+          onFilter: handleFilterClick,
         },
         style: {
           width: 200,
           boxShadow: '0 3px 8px rgba(0, 0, 0, 0.1)',
-          transition: 'all 0.2s ease-in-out',
-          opacity: highlightedNodes.size > 0 && !highlightedNodes.has(node.id) ? 0.25 : 1,
+          transition: 'opacity 0.2s ease-in-out, filter 0.2s ease-in-out',
+          opacity: highlightedNodes.size > 0 && !highlightedNodes.has(node.id) ? 0.6 : 1,
           filter: highlightedNodes.has(node.id) ? 'drop-shadow(0 0 10px rgba(66, 133, 244, 0.5))' : 'none',
           zIndex: highlightedNodes.has(node.id) ? 10 : 0,
         },
       };
     });
-  }, [visibleNodes, visibleEdges, toggleGroup]);
+  }, [filteredNodes, visibleEdges, toggleGroup, handleFilterClick, highlightedNodes, layerPositions]);
   
+  // Filter edges based on connection tracing
+  const filteredEdges = useMemo(() => {
+    if (highlightedNodes.size > 0) {
+      // Only show edges where both source and target are in the highlighted nodes
+      return visibleEdges.filter(edge => 
+        highlightedNodes.has(edge.source) && highlightedNodes.has(edge.target)
+      );
+    }
+    return visibleEdges;
+  }, [visibleEdges, highlightedNodes]);
+
   // Transform edges to use custom edge type with derived connections and highlighting
   const layoutEdges = useMemo(() => {
-    return visibleEdges.map(edge => {
+    return filteredEdges.map(edge => {
       // Check if this is a derived connection
       const isDerived = 
         // Feature groups derived from other feature groups
@@ -361,7 +397,7 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
         animated,
         style: {
           ...edge.style,
-          opacity: highlightedEdges.size > 0 && !isHighlighted ? 0.15 : 1,
+          opacity: highlightedEdges.size > 0 && !isHighlighted ? 0.4 : 1,
           zIndex: isHighlighted ? 1000 : 0,
         },
         data: {
@@ -376,37 +412,14 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
         },
       };
     });
-  }, [visibleEdges, highlightedEdges]);
+  }, [filteredEdges, highlightedEdges]);
 
-  // Node interactions
-  const handleNodeMouseEnter = useCallback((event: React.MouseEvent, node: Node) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    setTooltipPosition({
-      x: rect.right + 10,
-      y: rect.top,
-    });
-    setTooltipData(node.data);
-  }, []);
-
-  const handleNodeMouseLeave = useCallback(() => {
-    setTooltipData(null);
-  }, []);
-
+  // Node interactions (we don't need mouse enter/leave since we'll use ReactFlow tooltips)
   const handleNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
-    // Toggle highlighting when a node is clicked
-    if (highlightedNodeId === node.id) {
-      // Clear highlighting if the same node is clicked again
-      setHighlightedNodeId(null);
-      traceConnections(null, 'both');
-    } else {
-      // Highlight connections for this node
-      setHighlightedNodeId(node.id);
-      traceConnections(node.id, 'both');
-    }
-    
-    // Also call the external handler if provided
+    // Let the onNodeClick handler work normally - no longer doing tracing here
+    // Instead, let the filter button handle that
     onNodeClick?.(node);
-  }, [onNodeClick, highlightedNodeId, traceConnections]);
+  }, [onNodeClick]);
 
   return (
     <div className="provenance-graph-container">
@@ -416,12 +429,10 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
           toggleGroup={toggleGroup}
         />
         
+        {/* Show tracing controls when a node is highlighted */}
         {highlightedNodeId && (
           <TracingControls
             nodeId={highlightedNodeId}
-            onTraceUpstream={() => traceConnections(highlightedNodeId, 'upstream')}
-            onTraceDownstream={() => traceConnections(highlightedNodeId, 'downstream')}
-            onTraceBoth={() => traceConnections(highlightedNodeId, 'both')}
             onClearTrace={() => {
               setHighlightedNodeId(null);
               setHighlightedNodes(new Set());
@@ -430,14 +441,27 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
           />
         )}
       </div>
+      
+      {/* Floating reset button when in filtered mode */}
+      {highlightedNodes.size > 0 && (
+        <button 
+          className="reset-filter-button"
+          onClick={() => {
+            setHighlightedNodeId(null);
+            setHighlightedNodes(new Set());
+            setHighlightedEdges(new Set());
+          }}
+          title="Show all nodes and connections"
+        >
+          Reset View
+        </button>
+      )}
       <div className="flow-wrapper">
         <ReactFlow
           nodes={applyNodeHighlighting(layoutNodes)}
           edges={layoutEdges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
-          onNodeMouseEnter={handleNodeMouseEnter}
-          onNodeMouseLeave={handleNodeMouseLeave}
           onNodeClick={handleNodeClick}
           fitView
           attributionPosition="bottom-right"
@@ -456,19 +480,6 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
             color="rgba(0, 0, 0, 0.03)"
           />
         </ReactFlow>
-        {tooltipData && (
-          <div 
-            className="tooltip-container"
-            style={{
-              position: 'absolute',
-              left: `${tooltipPosition.x}px`,
-              top: `${tooltipPosition.y}px`,
-              zIndex: 1000,
-            }}
-          >
-            <NodeTooltip data={tooltipData} />
-          </div>
-        )}
       </div>
     </div>
   );
