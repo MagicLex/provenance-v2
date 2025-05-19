@@ -2,59 +2,50 @@ import React from 'react';
 
 interface TracingControlsProps {
   nodeId: string | null;
-  onTraceUpstream: () => void;
-  onTraceDownstream: () => void;
-  onTraceBoth: () => void;
   onClearTrace: () => void;
 }
 
 const TracingControls: React.FC<TracingControlsProps> = ({
   nodeId,
-  onTraceUpstream,
-  onTraceDownstream,
-  onTraceBoth,
   onClearTrace,
 }) => {
   if (!nodeId) return null;
 
+  // Format the node ID for display
+  const displayName = () => {
+    const parts = nodeId.split('-');
+    // Handle specific node types differently
+    if (parts[0] === 'fg') return `Feature Group ${parts[1]}`;
+    if (parts[0] === 'fv') return `Feature View ${parts[1]}`;
+    if (parts[0] === 'td') return `Training Dataset ${parts[1]}`;
+    if (parts[0] === 'model') return `Model ${parts[1]}`;
+    if (parts[0] === 'deploy') return `Deployment ${parts[1]}`;
+    if (parts[0] === 'source') return `Source ${parts[1]}`;
+    
+    // Fallback for unknown types
+    return parts.map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+  };
+
   return (
     <div className="tracing-controls">
       <div className="tracing-header">
-        <span className="tracing-title">Connection Tracing</span>
-        <span className="tracing-node-id">{nodeId}</span>
+        <span className="tracing-title">Filtered View</span>
+        <span className="tracing-node-id">
+          <span className="tracing-node-label">Selected:</span> {displayName()}
+        </span>
+      </div>
+      
+      <div className="tracing-info">
+        Showing only the nodes and connections directly related to <strong>{displayName()}</strong>.
       </div>
       
       <div className="tracing-buttons">
         <button 
-          className="tracing-button trace-upstream"
-          onClick={onTraceUpstream}
-          title="Trace all upstream connections (data sources)"
-        >
-          ⬆️ Upstream
-        </button>
-        
-        <button 
-          className="tracing-button trace-downstream"
-          onClick={onTraceDownstream}
-          title="Trace all downstream connections (data consumers)"
-        >
-          ⬇️ Downstream
-        </button>
-        
-        <button 
-          className="tracing-button trace-both"
-          onClick={onTraceBoth}
-          title="Trace both upstream and downstream connections"
-        >
-          ↕️ Both Directions
-        </button>
-        
-        <button 
           className="tracing-button clear-trace"
           onClick={onClearTrace}
-          title="Clear all highlighted connections"
+          title="Show all nodes again"
         >
-          ❌ Clear Trace
+          🔍 Return to Full View
         </button>
       </div>
     </div>

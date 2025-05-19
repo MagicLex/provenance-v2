@@ -49,10 +49,12 @@ const CustomEdge = ({
     // If the edge is highlighted, give it special styling
     if (isHighlighted) {
       return {
-        strokeWidth: 3,
+        strokeWidth: 3.5,
         stroke: '#FF5722', // Bright orange for highlighting
-        filter: 'drop-shadow(0 0 5px rgba(255, 87, 34, 0.5))',
-        strokeDasharray: isDerivedConnection ? '8 4' : undefined
+        filter: 'drop-shadow(0 0 8px rgba(255, 87, 34, 0.7))',
+        strokeDasharray: isDerivedConnection ? '8 4' : undefined,
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round'
       };
     }
     
