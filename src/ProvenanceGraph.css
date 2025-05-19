@@ -243,6 +243,23 @@
   stroke-dasharray: 5 5;
 }
 
+.derived-edge {
+  stroke-linecap: round;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.6;
+  }
+}
+
 /* Tooltip styling */
 .tooltip-container {
   pointer-events: none;

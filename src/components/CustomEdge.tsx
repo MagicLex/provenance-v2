@@ -13,17 +13,48 @@ const CustomEdge = ({
   data,
   markerEnd,
 }: EdgeProps) => {
+  // Calculate a more pronounced curve for the path
+  // especially if the nodes are derived (to better show hierarchy)
+  const isDerivedConnection = data?.isDerived;
+  
+  // Increase the curvature for derived connections
+  const curvature = isDerivedConnection ? 0.5 : 0.25;
+  
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
     sourcePosition,
+    targetPosition,
     targetX,
     targetY,
-    targetPosition,
+    curvature, // Apply custom curvature
   });
 
   const count = data?.count;
   const isAggregated = count && count > 1;
+  
+  // Change stroke color and style based on connection type
+  const getStrokeStyle = () => {
+    if (isAggregated) {
+      return {
+        strokeWidth: Math.min(Math.max(1, count / 10), 5),
+        stroke: '#6C8EBF',
+        strokeDasharray: '5 5'
+      };
+    }
+    
+    if (isDerivedConnection) {
+      return {
+        strokeWidth: 2,
+        stroke: '#82B366', // Green for derivation
+      };
+    }
+    
+    return {
+      strokeWidth: 1.5,
+      stroke: '#6C8EBF', // Default blue color
+    };
+  };
 
   return (
     <>
@@ -31,9 +62,9 @@ const CustomEdge = ({
         id={id}
         style={{
           ...style,
-          strokeWidth: isAggregated ? Math.min(Math.max(1, count / 10), 5) : 1,
+          ...getStrokeStyle(),
         }}
-        className={`react-flow__edge-path ${isAggregated ? 'aggregated-edge' : ''}`}
+        className={`react-flow__edge-path ${isAggregated ? 'aggregated-edge' : ''} ${isDerivedConnection ? 'derived-edge' : ''}`}
         d={edgePath}
         markerEnd={markerEnd}
       />
@@ -42,9 +73,9 @@ const CustomEdge = ({
           x={labelX}
           y={labelY}
           label={`${count} connections`}
-          labelStyle={{ fill: '#888', fontWeight: 500, fontSize: 12 }}
-          labelBgStyle={{ fill: 'white', fillOpacity: 0.75, rx: 4 }}
-          labelBgPadding={[2, 4]}
+          labelStyle={{ fill: '#555', fontWeight: 500, fontSize: 12 }}
+          labelBgStyle={{ fill: 'white', fillOpacity: 0.9, rx: 4 }}
+          labelBgPadding={[3, 6]}
           labelBgBorderRadius={4}
         />
       )}

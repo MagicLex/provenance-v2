@@ -58,13 +58,14 @@ interface ProvenanceGraphProps {
   onNodeClick?: (node: Node) => void;
 }
 
-const nodePositionsByType: Record<string, { x: number, y: number }> = {
-  source: { x: 0, y: 0 },
-  featureGroup: { x: 0, y: 200 },
-  featureView: { x: 0, y: 400 },
-  trainingDataset: { x: 0, y: 600 },
-  model: { x: 0, y: 800 },
-  deployment: { x: 0, y: 1000 },
+// Base vertical positions for each layer type
+const layerPositions: Record<string, number> = {
+  source: 0,
+  featureGroup: 200,
+  featureView: 400,
+  trainingDataset: 600,
+  model: 800,
+  deployment: 1000,
 };
 
 const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({ 
@@ -84,60 +85,182 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
     ['trainingDataset', 'model'] // Initially collapsed groups
   );
   
-  // Transform nodes with positions
+  // Helper to find all parent nodes of a given node
+  const findParentNodes = useCallback((nodeId: string, edges: Edge[]) => {
+    return edges
+      .filter(edge => edge.target === nodeId)
+      .map(edge => edge.source);
+  }, []);
+  
+  // Helper to find all child nodes of a given node
+  const findChildNodes = useCallback((nodeId: string, edges: Edge[]) => {
+    return edges
+      .filter(edge => edge.source === nodeId)
+      .map(edge => edge.target);
+  }, []);
+
+  // Transform nodes with positions using hierarchical layout
   const layoutNodes = useMemo(() => {
-    return visibleNodes.map((node, index) => {
+    // Step 1: Create a map to track node positions and hierarchy levels
+    const nodeMap = new Map();
+    const nodeLevels = new Map();
+    const childrenByParent = new Map();
+    const parentsByNode = new Map();
+
+    // Step 2: Identify parent-child relationships
+    visibleEdges.forEach(edge => {
+      const parents = parentsByNode.get(edge.target) || [];
+      parents.push(edge.source);
+      parentsByNode.set(edge.target, parents);
+      
+      const children = childrenByParent.get(edge.source) || [];
+      children.push(edge.target);
+      childrenByParent.set(edge.source, children);
+    });
+
+    // Step 3: Identify root nodes (nodes with no parents but have children)
+    const rootNodes = visibleNodes
+      .filter(node => {
+        const parents = parentsByNode.get(node.id) || [];
+        const children = childrenByParent.get(node.id) || [];
+        return parents.length === 0 && (children.length > 0 || node.type === 'source');
+      })
+      .map(node => node.id);
+
+    // Step 4: Assign initial levels and positions
+    const assignLevel = (nodeId: string, level: number, visited = new Set()) => {
+      if (visited.has(nodeId)) return;
+      visited.add(nodeId);
+
+      const currentLevel = nodeLevels.get(nodeId) || 0;
+      nodeLevels.set(nodeId, Math.max(level, currentLevel));
+      
+      const children = childrenByParent.get(nodeId) || [];
+      children.forEach(childId => {
+        assignLevel(childId, level + 1, visited);
+      });
+    };
+
+    rootNodes.forEach(nodeId => assignLevel(nodeId, 0));
+
+    // Step 5: Position nodes based on their type and level
+    return visibleNodes.map(node => {
       const nodeType = node.type === 'collapsedGroup' 
         ? (node as CollapsedGroup).group 
         : node.type;
       
-      // Calculate X position based on node index within its type
-      const sameTypeIndex = visibleNodes
-        .filter(n => {
-          const nType = n.type === 'collapsedGroup' 
-            ? (n as CollapsedGroup).group 
-            : n.type;
-          return nType === nodeType;
-        })
-        .findIndex(n => n.id === node.id);
+      // For collapsed groups, position them centrally
+      if (node.type === 'collapsedGroup') {
+        return {
+          ...node,
+          position: { 
+            x: 400, // Center position 
+            y: layerPositions[nodeType] || 0
+          },
+          data: {
+            ...node,
+            onExpand: toggleGroup,
+          },
+          style: {
+            width: 250,
+          },
+        };
+      }
+
+      // Get all nodes of this type to determine x-position
+      const sameTypeNodes = visibleNodes.filter(n => {
+        const nType = n.type === 'collapsedGroup' 
+          ? (n as CollapsedGroup).group 
+          : n.type;
+        return nType === nodeType && n.type !== 'collapsedGroup';
+      });
       
-      const basePosition = nodePositionsByType[nodeType] || { x: 0, y: 0 };
-      const xOffset = sameTypeIndex * 300; // Horizontal spacing
+      const nodeIndex = sameTypeNodes.findIndex(n => n.id === node.id);
       
-      // For collapsed groups, position them in the center of their group
-      const xPosition = node.type === 'collapsedGroup' 
-        ? 400 // Center position for collapsed groups
-        : basePosition.x + xOffset;
+      // Special positioning for derived feature groups
+      const isDerivedFeatureGroup = 
+        nodeType === 'featureGroup' && 
+        (node.id === 'fg-4' || node.id === 'fg-5');
+      
+      // Base vertical position based on node type
+      let yPosition = layerPositions[nodeType] || 0;
+      
+      // Calculate horizontal position
+      let xPosition;
+      
+      if (isDerivedFeatureGroup) {
+        // Position derived feature groups in a second row
+        yPosition += 120;
+        
+        // If it's fg-4, position it below fg-1 and fg-2 (its parents)
+        if (node.id === 'fg-4') {
+          xPosition = 300; // Between its parents
+        } 
+        // If it's fg-5, position it below fg-1 and fg-3 (its parents)
+        else if (node.id === 'fg-5') {
+          xPosition = 600; // Between its parents
+        }
+      } else {
+        // Position regular nodes based on their index
+        xPosition = nodeIndex * 300;
+        
+        // Adjust positions for specific node types to better show relationships
+        if (nodeType === 'source') {
+          if (node.id === 'source-1') xPosition = 0;
+          else if (node.id === 'source-2') xPosition = 300;
+          else if (node.id === 'source-3') xPosition = 600;
+        } 
+        else if (nodeType === 'featureGroup' && !isDerivedFeatureGroup) {
+          if (node.id === 'fg-1') xPosition = 0;
+          else if (node.id === 'fg-2') xPosition = 300;
+          else if (node.id === 'fg-3') xPosition = 600;
+        }
+      }
       
       return {
         ...node,
         position: { 
           x: xPosition, 
-          y: basePosition.y 
+          y: yPosition 
         },
         data: {
           ...node,
-          onExpand: node.type === 'collapsedGroup' ? toggleGroup : undefined,
         },
         style: {
-          width: node.type === 'collapsedGroup' ? 250 : 200,
+          width: 200,
         },
       };
     });
-  }, [visibleNodes, toggleGroup]);
+  }, [visibleNodes, visibleEdges, toggleGroup]);
   
-  // Transform edges to use custom edge type
+  // Transform edges to use custom edge type with derived connections
   const layoutEdges = useMemo(() => {
-    return visibleEdges.map(edge => ({
-      ...edge,
-      type: 'custom', // Use our custom edge component
-      animated: false,
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-        width: 20,
-        height: 20,
-      },
-    }));
+    return visibleEdges.map(edge => {
+      // Check if this is a derived connection
+      const isDerived = 
+        // Feature groups derived from other feature groups
+        (edge.source.startsWith('fg-') && edge.target.startsWith('fg-')) ||
+        // Feature groups to feature views
+        (edge.source.startsWith('fg-') && edge.target.startsWith('fv-'));
+        
+      // Special handling for aggregated edges
+      const isAggregated = edge.data?.count && edge.data.count > 1;
+      
+      return {
+        ...edge,
+        type: 'custom', // Use our custom edge component
+        animated: false,
+        data: {
+          ...edge.data,
+          isDerived, // Add this property to be used in CustomEdge
+        },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: isDerived ? 22 : 20,
+          height: isDerived ? 22 : 20,
+        },
+      };
+    });
   }, [visibleEdges]);
 
   // Node interactions
