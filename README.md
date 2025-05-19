@@ -8,6 +8,9 @@ A React component demonstration of the grouping/collapsing UX for feature store 
 - **Progressive Disclosure**: Start with a clean overview, then drill down to details as needed
 - **Edge Bundling**: Aggregated connections when groups are collapsed
 - **Interactive Experience**: Tooltips, expand/collapse animations, and responsive layout
+- **Connection Tracing**: Filter the graph to show only nodes connected to a selected node
+- **Visual Feedback**: Clear highlighting of traced connections with count statistics
+- **Smooth Transitions**: Animated state changes for better user understanding
 
 ## Implementation Focus
 
@@ -23,14 +26,19 @@ The demo focuses purely on the UX and interaction patterns, with:
 ```
 src/
 ├── ProvenanceGraph.tsx      # Main component
+├── ProvenanceGraph.css      # Styling
 ├── types.ts                 # Entity definitions
 ├── mockData.ts              # Realistic test data
 ├── hooks/                   # State management
 │   └── useGroupState.ts     # Collapse/expand logic
-└── components/              # Custom nodes
+└── components/              # Custom nodes and controls
     ├── SourceNode.tsx
     ├── FeatureGroupNode.tsx
     ├── CollapsedGroupNode.tsx
+    ├── FilterButton.tsx     # Node filtering control
+    ├── TracingControls.tsx  # Connection tracing panel 
+    ├── GroupControls.tsx    # Group collapse controls
+    ├── CustomEdge.tsx       # Styled edge renderer
     └── ...
 ```
 
@@ -72,3 +80,5 @@ import { ProvenanceGraph } from './ProvenanceGraph';
 - **Visual Hierarchy**: Clear entity relationships
 - **Progressive Disclosure**: Overview → drill-down workflow
 - **Edge Chaos**: Smart edge bundling when groups collapse
+- **Connection Understanding**: Ability to trace and view only relevant connections
+- **Visual Clutter**: Filter out irrelevant nodes when analyzing specific lineage

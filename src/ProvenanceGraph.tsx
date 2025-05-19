@@ -219,6 +219,11 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
 
   // Transform nodes with positions using hierarchical layout
   const layoutNodes = useMemo(() => {
+    // Get the total node count for displaying filtered status
+    const totalNodeCount = visibleNodes.length;
+    const filteredNodeCount = filteredNodes.length;
+    const isFiltering = highlightedNodes.size > 0;
+    
     // Step 1: Create a map to track node positions and hierarchy levels
     const nodeMap = new Map();
     const nodeLevels = new Map();
@@ -422,7 +427,7 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
   }, [onNodeClick]);
 
   return (
-    <div className="provenance-graph-container">
+    <div className={`provenance-graph-container ${highlightedNodes.size > 0 ? 'filtering-active' : ''}`}>
       <div className="controls-panel">
         <GroupControls 
           groupState={groupState}
@@ -433,6 +438,8 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
         {highlightedNodeId && (
           <TracingControls
             nodeId={highlightedNodeId}
+            filteredCount={filteredNodes.length}
+            totalCount={visibleNodes.length}
             onClearTrace={() => {
               setHighlightedNodeId(null);
               setHighlightedNodes(new Set());
@@ -453,7 +460,8 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
           }}
           title="Show all nodes and connections"
         >
-          Reset View
+          <span className="reset-filter-icon">🔍</span>
+          Reset Filter
         </button>
       )}
       <div className="flow-wrapper">

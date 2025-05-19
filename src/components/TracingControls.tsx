@@ -2,11 +2,15 @@ import React from 'react';
 
 interface TracingControlsProps {
   nodeId: string | null;
+  filteredCount?: number;
+  totalCount?: number;
   onClearTrace: () => void;
 }
 
 const TracingControls: React.FC<TracingControlsProps> = ({
   nodeId,
+  filteredCount,
+  totalCount,
   onClearTrace,
 }) => {
   if (!nodeId) return null;
@@ -37,6 +41,13 @@ const TracingControls: React.FC<TracingControlsProps> = ({
       
       <div className="tracing-info">
         Showing only the nodes and connections directly related to <strong>{displayName()}</strong>.
+        {filteredCount !== undefined && totalCount !== undefined && (
+          <div className="tracing-stats">
+            <span className="stats-count">
+              Showing {filteredCount} of {totalCount} nodes ({Math.round(filteredCount/totalCount * 100)}%)
+            </span>
+          </div>
+        )}
       </div>
       
       <div className="tracing-buttons">

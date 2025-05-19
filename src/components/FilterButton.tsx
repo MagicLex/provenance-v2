@@ -15,7 +15,7 @@ const FilterButton: React.FC<FilterButtonProps> = ({ nodeId, onClick }) => {
         onClick(nodeId);
       }}
     >
-      🔍
+      <span className="filter-icon">🔍</span>
     </button>
   );
 };
