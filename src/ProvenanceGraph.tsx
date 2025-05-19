@@ -31,6 +31,7 @@ import CollapsedGroupNode from './components/CollapsedGroupNode';
 import GroupControls from './components/GroupControls';
 import CustomEdge from './components/CustomEdge';
 import TracingControls from './components/TracingControls';
+import NameFilterControls from './components/NameFilterControls';
 
 import './ProvenanceGraph.css';
 
@@ -80,6 +81,10 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
   const [highlightedNodes, setHighlightedNodes] = useState<Set<string>>(new Set());
   const [highlightedEdges, setHighlightedEdges] = useState<Set<string>>(new Set());
+  
+  // State for name filtering
+  const [nameFilter, setNameFilter] = useState<string>('');
+  const [nodeTypeFilter, setNodeTypeFilter] = useState<string | null>(null);
   
   // Use the group state hook for collapsible groups
   const { groupState, toggleGroup, visibleNodes, visibleEdges } = useGroupState(
@@ -201,15 +206,56 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
     });
   }, [highlightedNodes, layerPositions]);
 
-  // Filter nodes based on connection tracing
-  const filteredNodes = useMemo(() => {
-    // If we have highlighted nodes, only show those
-    if (highlightedNodes.size > 0) {
-      return visibleNodes.filter(node => highlightedNodes.has(node.id));
+  // Handle name filter changes
+  const handleNameFilterChange = useCallback((name: string, nodeType: string | null) => {
+    setNameFilter(name);
+    setNodeTypeFilter(nodeType);
+    
+    // Clear connection highlighting when applying a name filter
+    if (name || nodeType) {
+      setHighlightedNodeId(null);
+      setHighlightedNodes(new Set());
+      setHighlightedEdges(new Set());
     }
-    // Otherwise show all nodes
-    return visibleNodes;
-  }, [visibleNodes, highlightedNodes]);
+  }, []);
+  
+  // Filter nodes based on both connection tracing and name filtering
+  const filteredNodes = useMemo(() => {
+    let result = visibleNodes;
+    
+    // First apply connection tracing if active
+    if (highlightedNodes.size > 0) {
+      result = result.filter(node => highlightedNodes.has(node.id));
+    }
+    
+    // Then apply name filtering if active
+    if (nameFilter || nodeTypeFilter) {
+      result = result.filter(node => {
+        // Apply node type filter if specified
+        if (nodeTypeFilter && node.type !== nodeTypeFilter && node.type !== 'collapsedGroup') {
+          return false;
+        }
+        
+        // For collapsed groups, check if they match the node type filter
+        if (nodeTypeFilter && node.type === 'collapsedGroup') {
+          const groupType = (node as any).group;
+          if (groupType !== nodeTypeFilter) {
+            return false;
+          }
+        }
+        
+        // Apply name filter if specified
+        if (nameFilter) {
+          const label = node.data?.label?.toLowerCase() || '';
+          return label.includes(nameFilter.toLowerCase());
+        }
+        
+        return true;
+      });
+    }
+    
+    return result;
+  }, [visibleNodes, highlightedNodes, nameFilter, nodeTypeFilter]);
 
   // Handle direct filtering button click
   const handleFilterClick = useCallback((nodeId: string) => {
@@ -366,16 +412,29 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
     });
   }, [filteredNodes, visibleEdges, toggleGroup, handleFilterClick, highlightedNodes, layerPositions]);
   
-  // Filter edges based on connection tracing
+  // Filter edges based on connection tracing and name filtering
   const filteredEdges = useMemo(() => {
+    let result = visibleEdges;
+    
+    // For connection tracing, only show edges where both source and target are highlighted
     if (highlightedNodes.size > 0) {
-      // Only show edges where both source and target are in the highlighted nodes
-      return visibleEdges.filter(edge => 
+      result = result.filter(edge => 
         highlightedNodes.has(edge.source) && highlightedNodes.has(edge.target)
       );
     }
-    return visibleEdges;
-  }, [visibleEdges, highlightedNodes]);
+    
+    // For name filtering, only show edges where both source and target are in the filtered nodes
+    if (nameFilter || nodeTypeFilter) {
+      // Get the IDs of all filtered nodes for quick lookup
+      const filteredNodeIds = new Set(filteredNodes.map(node => node.id));
+      
+      result = result.filter(edge => 
+        filteredNodeIds.has(edge.source) && filteredNodeIds.has(edge.target)
+      );
+    }
+    
+    return result;
+  }, [visibleEdges, highlightedNodes, filteredNodes, nameFilter, nodeTypeFilter]);
 
   // Transform edges to use custom edge type with derived connections and highlighting
   const layoutEdges = useMemo(() => {
@@ -427,7 +486,7 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
   }, [onNodeClick]);
 
   return (
-    <div className={`provenance-graph-container ${highlightedNodes.size > 0 ? 'filtering-active' : ''}`}>
+    <div className={`provenance-graph-container ${(highlightedNodes.size > 0 || nameFilter || nodeTypeFilter) ? 'filtering-active' : ''}`}>
       <div className="controls-panel">
         <GroupControls 
           groupState={groupState}
@@ -447,21 +506,31 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
             }}
           />
         )}
+        
+        {/* Name filtering controls */}
+        <NameFilterControls
+          onFilterChange={handleNameFilterChange}
+          nameFilter={nameFilter}
+          nodeTypeFilter={nodeTypeFilter}
+        />
       </div>
       
-      {/* Floating reset button when in filtered mode */}
-      {highlightedNodes.size > 0 && (
+      {/* Floating reset button when any filtering is active */}
+      {(highlightedNodes.size > 0 || nameFilter || nodeTypeFilter) && (
         <button 
           className="reset-filter-button"
           onClick={() => {
+            // Clear both connection tracing and name filtering
             setHighlightedNodeId(null);
             setHighlightedNodes(new Set());
             setHighlightedEdges(new Set());
+            setNameFilter('');
+            setNodeTypeFilter(null);
           }}
           title="Show all nodes and connections"
         >
           <span className="reset-filter-icon">🔍</span>
-          Reset Filter
+          Reset All Filters
         </button>
       )}
       <div className="flow-wrapper">
