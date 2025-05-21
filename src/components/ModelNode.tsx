@@ -5,8 +5,8 @@ import FilterButton from './FilterButton';
 const ModelNode = ({ data }: { data: any }) => {
   return (
     <div className="node model-node">
-      <Handle type="target" position={Position.Top} />
-      <Handle type="source" position={Position.Bottom} />
+      <Handle type="target" position={Position.Left} />
+      <Handle type="source" position={Position.Right} />
       
       {/* Filter button to show only connections related to this node */}
       {data.onFilter && (

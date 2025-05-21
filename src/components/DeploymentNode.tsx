@@ -5,7 +5,7 @@ import FilterButton from './FilterButton';
 const DeploymentNode = ({ data }: { data: any }) => {
   return (
     <div className="node deployment-node">
-      <Handle type="target" position={Position.Top} />
+      <Handle type="target" position={Position.Left} />
       
       {/* Filter button to show only connections related to this node */}
       {data.onFilter && (

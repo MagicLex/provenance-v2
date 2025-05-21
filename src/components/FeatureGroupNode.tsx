@@ -45,8 +45,8 @@ const FeatureGroupNode = ({ data }: { data: any }) => {
       </NodeToolbar>
       
       <div className="node feature-group-node">
-        <Handle type="target" position={Position.Top} />
-        <Handle type="source" position={Position.Bottom} />
+        <Handle type="target" position={Position.Left} />
+        <Handle type="source" position={Position.Right} />
         
         {/* Filter button to show only connections related to this node */}
         {data.onFilter && (

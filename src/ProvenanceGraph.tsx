@@ -59,14 +59,14 @@ interface ProvenanceGraphProps {
   onNodeClick?: (node: Node) => void;
 }
 
-// Base vertical positions for each layer type (fixed grid layout)
+// Base horizontal positions for each column in the layout
 const layerPositions: Record<string, number> = {
   source: 0,
-  featureGroup: 200,
-  featureView: 400,
-  trainingDataset: 600,
-  model: 800,
-  deployment: 1000,
+  featureGroup: 300,
+  featureView: 600,
+  trainingDataset: 900,
+  model: 1200,
+  deployment: 1500,
 };
 
 const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({ 
@@ -173,9 +173,9 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
     
   }, [findParentNodes, findChildNodes, visibleEdges, groupState, toggleGroup]);
 
-  // Add highlighting classes to nodes and sort them for proper layering
+  // Add highlighting classes to nodes and sort them for proper columnar layout
   const applyNodeHighlighting = useCallback((nodes: Node[]) => {
-    // First sort nodes by layer for proper rendering order
+    // First sort nodes by column for proper rendering order
     const sortedNodes = [...nodes].sort((a, b) => {
       // Get node types
       const aType = a.type === 'collapsedGroup' 
@@ -185,15 +185,15 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
         ? (b as any).data.group
         : b.type;
       
-      // Get layer positions
+      // Get column positions (horizontal positions)
       const aPos = layerPositions[aType] || 0;
       const bPos = layerPositions[bType] || 0;
       
-      // Sort by vertical position first
+      // Sort by horizontal position first (column order)
       if (aPos !== bPos) return aPos - bPos;
       
-      // Then by horizontal position for nodes in the same layer
-      return a.position.x - b.position.x;
+      // Then by vertical position for nodes in the same column
+      return a.position.y - b.position.y;
     });
     
     // Then apply the highlighting
@@ -318,13 +318,13 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
         ? (node as CollapsedGroup).group 
         : node.type;
       
-      // For collapsed groups, position them centrally
+      // For collapsed groups, position them in their proper column
       if (node.type === 'collapsedGroup') {
         return {
           ...node,
           position: { 
-            x: 400, // Center position 
-            y: layerPositions[nodeType] || 0
+            x: layerPositions[nodeType] || 0, // Horizontal position based on node type
+            y: 300 // Centered vertically
           },
           data: {
             ...node,
@@ -355,38 +355,38 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
         nodeType === 'featureGroup' && 
         (node.id === 'fg-4' || node.id === 'fg-5');
       
-      // Base vertical position based on node type (fixed grid)
-      let yPosition = layerPositions[nodeType] || 0;
+      // Base horizontal position based on node type (columnar layout)
+      let xPosition = layerPositions[nodeType] || 0;
       
-      // Calculate horizontal position (strict grid)
-      let xPosition;
+      // Calculate vertical position (nodes stacked in columns)
+      let yPosition;
       
       if (isDerivedFeatureGroup) {
-        // Position derived feature groups below their parent groups
-        yPosition += 120;
+        // Position derived feature groups to the right of their column
+        xPosition += 100;
         
-        // If it's fg-4, position it below fg-1 and fg-2 (its parents)
+        // If it's fg-4, position it at specific vertical position
         if (node.id === 'fg-4') {
-          xPosition = 300; // Between its parents
+          yPosition = 200;
         } 
-        // If it's fg-5, position it below fg-1 and fg-3 (its parents)
+        // If it's fg-5, position it further down in the column
         else if (node.id === 'fg-5') {
-          xPosition = 600; // Between its parents
+          yPosition = 400;
         }
       } else {
-        // Position regular nodes based on their index
-        xPosition = nodeIndex * 300;
+        // Position regular nodes based on their index within the same type
+        yPosition = nodeIndex * 180;
         
-        // Adjust positions for specific node types
+        // Adjust positions for specific node types to ensure consistent spacing
         if (nodeType === 'source') {
-          if (node.id === 'source-1') xPosition = 0;
-          else if (node.id === 'source-2') xPosition = 300;
-          else if (node.id === 'source-3') xPosition = 600;
+          if (node.id === 'source-1') yPosition = 0;
+          else if (node.id === 'source-2') yPosition = 180;
+          else if (node.id === 'source-3') yPosition = 360;
         } 
         else if (nodeType === 'featureGroup' && !isDerivedFeatureGroup) {
-          if (node.id === 'fg-1') xPosition = 0;
-          else if (node.id === 'fg-2') xPosition = 300;
-          else if (node.id === 'fg-3') xPosition = 600;
+          if (node.id === 'fg-1') yPosition = 0;
+          else if (node.id === 'fg-2') yPosition = 180;
+          else if (node.id === 'fg-3') yPosition = 360;
         }
       }
       
@@ -543,6 +543,9 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
           fitView
           attributionPosition="bottom-right"
           connectionLineType={ConnectionLineType.Bezier}
+          defaultViewport={{ x: 0, y: 0, zoom: 0.6 }}
+          minZoom={0.4}
+          maxZoom={1.5}
         >
           <Controls />
           <MiniMap 
