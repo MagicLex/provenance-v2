@@ -618,6 +618,17 @@
   stroke-linecap: square;
 }
 
+/* SVG marker definitions for custom circle marker */
+.react-flow__svg defs marker#circleMarker circle {
+  fill: #57606a;
+  stroke: none;
+}
+
+.react-flow__svg defs marker#circleMarkerHighlighted circle {
+  fill: #0969da;
+  stroke: none;
+}
+
 @keyframes pulse {
   0% {
     opacity: 0.6;

@@ -1,6 +1,20 @@
 import React from 'react';
 import { EdgeProps, getBezierPath, EdgeText } from 'reactflow';
 
+// Define a custom circle marker
+const CircleMarker = ({ id, color = '#57606a', size = 3 }) => (
+  <marker
+    id={id}
+    viewBox="0 0 10 10"
+    refX="5"
+    refY="5"
+    markerWidth={size}
+    markerHeight={size}
+  >
+    <circle cx="5" cy="5" r="4" fill={color} stroke="none" />
+  </marker>
+);
+
 const CustomEdge = ({
   id,
   sourceX,
@@ -83,8 +97,15 @@ const CustomEdge = ({
     };
   };
 
+  // Create marker ID specific to this edge to change color
+  const markerId = isHighlighted ? 'circle-marker-highlighted' : 'circle-marker';
+  const markerColor = isHighlighted ? '#0969da' : '#57606a';
+  
   return (
     <>
+      <defs>
+        <CircleMarker id={markerId} color={markerColor} />
+      </defs>
       <path
         id={id}
         style={{
@@ -93,7 +114,7 @@ const CustomEdge = ({
         }}
         className={`react-flow__edge-path ${isAggregated ? 'aggregated-edge' : ''} ${isDerivedConnection ? 'derived-edge' : ''}`}
         d={edgePath}
-        markerEnd={markerEnd}
+        markerEnd={`url(#${markerId})`}
       />
       {isAggregated && (
         <EdgeText

@@ -361,33 +361,87 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
       // Calculate vertical position (nodes stacked in columns)
       let yPosition;
       
+      // Create a map of positioned nodes for overlap detection
+      const positionedNodesMap = new Map();
+      filteredNodes.forEach(n => {
+        if (n.position && n.id !== node.id) {
+          positionedNodesMap.set(n.id, n.position);
+        }
+      });
+      
+      // Constants for spacing
+      const NODE_HEIGHT = 120; // Approximate height of a node
+      const VERTICAL_SPACING = 60; // Additional space between nodes
+      const MIN_VERTICAL_GAP = NODE_HEIGHT + VERTICAL_SPACING;
+      
+      // Initialize with basic vertical positioning based on index
+      yPosition = nodeIndex * MIN_VERTICAL_GAP;
+      
       if (isDerivedFeatureGroup) {
-        // Position derived feature groups to the right of their column
-        xPosition += 100;
+        // Find parent nodes for derived feature groups
+        const parentIds = [];
+        visibleEdges.forEach(edge => {
+          if (edge.target === node.id) {
+            parentIds.push(edge.source);
+          }
+        });
         
-        // If it's fg-4, position it at specific vertical position
-        if (node.id === 'fg-4') {
-          yPosition = 200;
-        } 
-        // If it's fg-5, position it further down in the column
-        else if (node.id === 'fg-5') {
-          yPosition = 400;
+        // Position derived feature groups to the right of their column to show derivation
+        xPosition += 80;
+        
+        // Try to position the derived feature group between its parents
+        if (parentIds.length > 0) {
+          const parentPositions = [];
+          
+          parentIds.forEach(parentId => {
+            const parentNode = filteredNodes.find(n => n.id === parentId);
+            if (parentNode && parentNode.position) {
+              parentPositions.push(parentNode.position.y);
+            }
+          });
+          
+          if (parentPositions.length > 0) {
+            // Position the derived node below its parents
+            yPosition = Math.max(...parentPositions) + MIN_VERTICAL_GAP;
+          }
         }
       } else {
-        // Position regular nodes based on their index within the same type
-        yPosition = nodeIndex * 180;
+        // Base position for regular nodes
+        yPosition = nodeIndex * MIN_VERTICAL_GAP;
+      }
+      
+      // Check for overlaps with existing nodes in the same column
+      let hasOverlap = true;
+      let attempts = 0;
+      const maxAttempts = 10; // Prevent infinite loops
+      
+      while (hasOverlap && attempts < maxAttempts) {
+        hasOverlap = false;
         
-        // Adjust positions for specific node types to ensure consistent spacing
-        if (nodeType === 'source') {
-          if (node.id === 'source-1') yPosition = 0;
-          else if (node.id === 'source-2') yPosition = 180;
-          else if (node.id === 'source-3') yPosition = 360;
-        } 
-        else if (nodeType === 'featureGroup' && !isDerivedFeatureGroup) {
-          if (node.id === 'fg-1') yPosition = 0;
-          else if (node.id === 'fg-2') yPosition = 180;
-          else if (node.id === 'fg-3') yPosition = 360;
-        }
+        // Check all positioned nodes for overlaps
+        filteredNodes.forEach(otherNode => {
+          if (otherNode.id !== node.id && otherNode.position) {
+            // Only check nodes in same or adjacent columns (allow for derived nodes offset)
+            const otherType = otherNode.type === 'collapsedGroup' 
+              ? (otherNode as any).data.group 
+              : otherNode.type;
+              
+            const otherX = otherNode.position.x;
+            const otherY = otherNode.position.y;
+            
+            // Check if this node would overlap with any others
+            const horizontalOverlap = Math.abs(otherX - xPosition) <= 200;
+            const verticalOverlap = Math.abs(otherY - yPosition) < MIN_VERTICAL_GAP - 20;
+            
+            if (horizontalOverlap && verticalOverlap) {
+              // Move this node down to avoid overlap
+              yPosition = otherY + MIN_VERTICAL_GAP;
+              hasOverlap = true;
+            }
+          }
+        });
+        
+        attempts++;
       }
       
       return {
@@ -469,8 +523,8 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
           isDerived, // Add this property to be used in CustomEdge
           isHighlighted,
         },
-        // Remove arrow markers completely for cleaner left-to-right flow
-        markerEnd: undefined,
+        // Custom circle markers are now defined in the CustomEdge component
+        // We don't need to specify markerEnd here as it's handled in CustomEdge
       };
     });
   }, [filteredEdges, highlightedEdges]);
@@ -540,9 +594,9 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
           fitView
           attributionPosition="bottom-right"
           connectionLineType={ConnectionLineType.Bezier}
-          defaultViewport={{ x: 0, y: 0, zoom: 0.7 }}
+          defaultViewport={{ x: 50, y: 0, zoom: 0.75 }}
           minZoom={0.5}
-          maxZoom={1.8}
+          maxZoom={2.0}
         >
           <Controls />
           <MiniMap 
