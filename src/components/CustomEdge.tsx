@@ -43,46 +43,43 @@ const CustomEdge = ({
   
   // Change stroke color and style based on connection type and highlight status
   const getStrokeStyle = () => {
-    // Use edge ID to get a deterministic but varied opacity
-    const opacity = 0.7 + (edgeIdHash % 30) / 100;
+    // Use a lower base opacity for subtler lines
+    const opacity = 0.5 + (edgeIdHash % 20) / 100;
     
     // If the edge is highlighted, give it special styling
     if (isHighlighted) {
       return {
-        strokeWidth: 3.5,
-        stroke: '#FF5722', // Bright orange for highlighting
-        filter: 'drop-shadow(0 0 8px rgba(255, 87, 34, 0.7))',
-        strokeDasharray: isDerivedConnection ? '8 4' : undefined,
-        strokeLinecap: 'round',
-        strokeLinejoin: 'round'
+        strokeWidth: 1.5,
+        stroke: '#0969da', // GitHub blue for highlighting
+        strokeDasharray: undefined,
+        strokeLinecap: 'square',
+        filter: 'none'
       };
     }
     
     if (isAggregated) {
       return {
-        strokeWidth: Math.min(Math.max(1, count / 10), 5),
-        stroke: `rgba(108, 142, 191, ${opacity})`,
-        strokeDasharray: '5 5',
-        filter: 'drop-shadow(0 0 1px rgba(108, 142, 191, 0.3))'
+        strokeWidth: Math.min(Math.max(0.75, count / 15), 2),
+        stroke: `rgba(87, 96, 106, ${opacity})`, // GitHub gray
+        strokeDasharray: '3 3',
+        filter: 'none'
       };
     }
     
     if (isDerivedConnection) {
-      // Create slight color variations for derived edges
-      const hueShift = (edgeIdHash % 20) - 10; // -10 to +10 hue shift
       return {
-        strokeWidth: 2,
-        stroke: `rgba(130, ${179 + hueShift}, ${102 + hueShift}, ${opacity})`, // Slightly varied green
-        filter: 'drop-shadow(0 0 2px rgba(130, 179, 102, 0.3))'
+        strokeWidth: 1,
+        stroke: `rgba(87, 96, 106, ${opacity + 0.1})`, // Slightly darker GitHub gray
+        strokeDasharray: '2 2',
+        filter: 'none'
       };
     }
     
-    // For regular connections, add subtle variations
-    const blueVariation = (edgeIdHash % 30) - 15; // -15 to +15
+    // For regular connections, keep it simple and light
     return {
-      strokeWidth: 1.5,
-      stroke: `rgba(${108 + blueVariation}, ${142 + blueVariation}, ${191 + blueVariation}, ${opacity})`,
-      filter: 'drop-shadow(0 0 1px rgba(108, 142, 191, 0.2))'
+      strokeWidth: 1,
+      stroke: `rgba(87, 96, 106, ${opacity})`, // GitHub gray
+      filter: 'none'
     };
   };
 
@@ -103,10 +100,10 @@ const CustomEdge = ({
           x={labelX}
           y={labelY}
           label={`${count} connections`}
-          labelStyle={{ fill: '#555', fontWeight: 500, fontSize: 12 }}
-          labelBgStyle={{ fill: 'white', fillOpacity: 0.9, rx: 4 }}
-          labelBgPadding={[3, 6]}
-          labelBgBorderRadius={4}
+          labelStyle={{ fill: '#57606a', fontWeight: 500, fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace' }}
+          labelBgStyle={{ fill: 'white', fillOpacity: 0.95, stroke: '#d0d7de', strokeWidth: 1 }}
+          labelBgPadding={[2, 5]}
+          labelBgBorderRadius={2}
         />
       )}
     </>

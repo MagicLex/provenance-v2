@@ -469,11 +469,8 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
           isDerived, // Add this property to be used in CustomEdge
           isHighlighted,
         },
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          width: (isDerived || isHighlighted) ? 22 : 20,
-          height: (isDerived || isHighlighted) ? 22 : 20,
-        },
+        // Remove arrow markers completely for cleaner left-to-right flow
+        markerEnd: undefined,
       };
     });
   }, [filteredEdges, highlightedEdges]);
@@ -543,21 +540,34 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
           fitView
           attributionPosition="bottom-right"
           connectionLineType={ConnectionLineType.Bezier}
-          defaultViewport={{ x: 0, y: 0, zoom: 0.6 }}
-          minZoom={0.4}
-          maxZoom={1.5}
+          defaultViewport={{ x: 0, y: 0, zoom: 0.7 }}
+          minZoom={0.5}
+          maxZoom={1.8}
         >
           <Controls />
           <MiniMap 
-            nodeStrokeWidth={3}
+            nodeStrokeWidth={1}
+            nodeColor={(node) => {
+              switch (node.type) {
+                case 'source': return '#0969da';
+                case 'featureGroup': return '#1a7f37';
+                case 'featureView': return '#9a6700';
+                case 'trainingDataset': return '#cf222e';
+                case 'model': return '#6639ba';
+                case 'deployment': return '#bf3989';
+                case 'collapsedGroup': return '#d0d7de';
+                default: return '#d0d7de';
+              }
+            }}
+            maskColor="rgba(240, 242, 244, 0.7)"
             zoomable
             pannable
           />
           <Background
             variant="dots"
-            gap={20}
-            size={1.5}
-            color="rgba(0, 0, 0, 0.03)"
+            gap={16}
+            size={1}
+            color="rgba(0, 0, 0, 0.04)"
           />
         </ReactFlow>
       </div>
