@@ -13,6 +13,8 @@ import ReactFlow, {
   NodeTypes,
   EdgeTypes,
   ConnectionLineType,
+  applyNodeChanges,
+  NodeChange,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -59,14 +61,14 @@ interface ProvenanceGraphProps {
   onNodeClick?: (node: Node) => void;
 }
 
-// Base horizontal positions for each column in the layout
-const layerPositions: Record<string, number> = {
-  source: 0,
-  featureGroup: 300,
-  featureView: 600,
-  trainingDataset: 900,
-  model: 1200,
-  deployment: 1500,
+// Grid settings for snap-to-grid layout
+const GRID_SIZE = 80; // Size of grid cells - increased for more visible effect
+const NODE_HORIZONTAL_DISTANCE = 320; // Fixed horizontal distance between node levels (multiple of grid size)
+const NODE_VERTICAL_DISTANCE = 160; // Base vertical distance between nodes (multiple of grid size)
+
+// Function to snap a position to the grid
+const snapToGrid = (position: number): number => {
+  return Math.round(position / GRID_SIZE) * GRID_SIZE;
 };
 
 const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({ 
@@ -74,8 +76,6 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
   onNodeClick
 }) => {
   const reactFlowInstance = useReactFlow();
-  
-  // We'll use ReactFlow's own tooltip functionality instead of custom tooltips
   
   // State for connection highlighting
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
@@ -85,6 +85,9 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
   // State for name filtering
   const [nameFilter, setNameFilter] = useState<string>('');
   const [nodeTypeFilter, setNodeTypeFilter] = useState<string | null>(null);
+  
+  // State for storing node positions (for manual node dragging)
+  const [manualPositions, setManualPositions] = useState<Record<string, { x: number, y: number }>>({});
   
   // Use the group state hook for collapsible groups
   const { groupState, toggleGroup, visibleNodes, visibleEdges } = useGroupState(
@@ -173,38 +176,17 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
     
   }, [findParentNodes, findChildNodes, visibleEdges, groupState, toggleGroup]);
 
-  // Add highlighting classes to nodes and sort them for proper columnar layout
+  // Add highlighting classes to nodes
   const applyNodeHighlighting = useCallback((nodes: Node[]) => {
-    // First sort nodes by column for proper rendering order
-    const sortedNodes = [...nodes].sort((a, b) => {
-      // Get node types
-      const aType = a.type === 'collapsedGroup' 
-        ? (a as any).data.group
-        : a.type;
-      const bType = b.type === 'collapsedGroup'
-        ? (b as any).data.group
-        : b.type;
-      
-      // Get column positions (horizontal positions)
-      const aPos = layerPositions[aType] || 0;
-      const bPos = layerPositions[bType] || 0;
-      
-      // Sort by horizontal position first (column order)
-      if (aPos !== bPos) return aPos - bPos;
-      
-      // Then by vertical position for nodes in the same column
-      return a.position.y - b.position.y;
-    });
-    
-    // Then apply the highlighting
-    return sortedNodes.map(node => {
+    // Apply highlighting to nodes without sorting by columns
+    return nodes.map(node => {
       const isHighlighted = highlightedNodes.has(node.id);
       return {
         ...node,
         className: `${node.className || ''} ${isHighlighted ? 'highlighted' : ''}`.trim()
       };
     });
-  }, [highlightedNodes, layerPositions]);
+  }, [highlightedNodes]);
 
   // Handle name filter changes
   const handleNameFilterChange = useCallback((name: string, nodeType: string | null) => {
@@ -262,21 +244,65 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
     setHighlightedNodeId(nodeId);
     traceConnections(nodeId);
   }, [traceConnections]);
+  
+  // Add a reset positions button that's always visible
+  const ResetPositionsButton = () => (
+    <button 
+      className="reset-positions-button"
+      onClick={handleResetNodePositions}
+      title="Reset node positions to automatic layout"
+      style={{
+        position: 'absolute',
+        top: '16px',
+        right: '16px',
+        zIndex: 1000,
+      }}
+    >
+      <span className="reset-positions-icon">↻</span>
+      Reset Positions
+    </button>
+  );
 
-  // Transform nodes with positions using hierarchical layout
+  // Handle node dragging and positioning with grid snapping
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    // Update manual positions when nodes are dragged, with grid snapping
+    changes.forEach(change => {
+      if (change.type === 'position' && change.position) {
+        // If the node has stopped dragging, snap its final position to the grid
+        if (!change.dragging) {
+          const snappedX = snapToGrid(change.position.x);
+          const snappedY = snapToGrid(change.position.y);
+          
+          setManualPositions(prev => ({
+            ...prev,
+            [change.id]: { x: snappedX, y: snappedY }
+          }));
+          
+          // Update the position in the change object to show the snap
+          change.position.x = snappedX;
+          change.position.y = snappedY;
+        } else {
+          // During dragging, just track the position normally
+          setManualPositions(prev => ({
+            ...prev,
+            [change.id]: { x: change.position!.x, y: change.position!.y }
+          }));
+        }
+      }
+    });
+  }, []);
+
+  // Create a more organic force-directed layout
   const layoutNodes = useMemo(() => {
-    // Get the total node count for displaying filtered status
-    const totalNodeCount = visibleNodes.length;
-    const filteredNodeCount = filteredNodes.length;
-    const isFiltering = highlightedNodes.size > 0;
+    // If there are no nodes, return an empty array
+    if (filteredNodes.length === 0) return [];
     
-    // Step 1: Create a map to track node positions and hierarchy levels
-    const nodeMap = new Map();
-    const nodeLevels = new Map();
+    // Create maps for parent-child relationships
     const childrenByParent = new Map();
     const parentsByNode = new Map();
-
-    // Step 2: Identify parent-child relationships
+    const nodeDepths = new Map();
+    
+    // Step 1: Build the parent-child relationship maps
     visibleEdges.forEach(edge => {
       const parents = parentsByNode.get(edge.target) || [];
       parents.push(edge.source);
@@ -286,162 +312,203 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
       children.push(edge.target);
       childrenByParent.set(edge.source, children);
     });
-
-    // Step 3: Identify root nodes (nodes with no parents but have children)
-    const rootNodes = filteredNodes
-      .filter(node => {
-        const parents = parentsByNode.get(node.id) || [];
-        const children = childrenByParent.get(node.id) || [];
-        return parents.length === 0 && (children.length > 0 || node.type === 'source');
-      })
-      .map(node => node.id);
-
-    // Step 4: Assign initial levels and positions
-    const assignLevel = (nodeId: string, level: number, visited = new Set()) => {
+    
+    // Step 2: Calculate node depths (distance from any root)
+    const calculateDepth = (nodeId: string, depth: number, visited = new Set<string>()) => {
       if (visited.has(nodeId)) return;
       visited.add(nodeId);
-
-      const currentLevel = nodeLevels.get(nodeId) || 0;
-      nodeLevels.set(nodeId, Math.max(level, currentLevel));
+      
+      const currentDepth = nodeDepths.get(nodeId) || 0;
+      nodeDepths.set(nodeId, Math.max(currentDepth, depth));
       
       const children = childrenByParent.get(nodeId) || [];
       children.forEach(childId => {
-        assignLevel(childId, level + 1, visited);
+        calculateDepth(childId, depth + 1, visited);
       });
     };
-
-    rootNodes.forEach(nodeId => assignLevel(nodeId, 0));
-
-    // Step 5: Position nodes based on their type and level
+    
+    // Find root nodes (nodes with no parents)
+    const rootNodes = filteredNodes
+      .filter(node => {
+        const parents = parentsByNode.get(node.id) || [];
+        return parents.length === 0;
+      })
+      .map(node => node.id);
+    
+    // Calculate depths starting from root nodes
+    rootNodes.forEach(nodeId => calculateDepth(nodeId, 0));
+    
+    // Step 3: Position nodes based on their parents and children
     return filteredNodes.map(node => {
-      const nodeType = node.type === 'collapsedGroup' 
-        ? (node as CollapsedGroup).group 
-        : node.type;
-      
-      // For collapsed groups, position them in their proper column
-      if (node.type === 'collapsedGroup') {
+      // Check if this node has a manually set position
+      if (manualPositions[node.id]) {
+        // Use the manually positioned coordinates
+        const manualPos = manualPositions[node.id];
         return {
           ...node,
-          position: { 
-            x: layerPositions[nodeType] || 0, // Horizontal position based on node type
-            y: 300 // Centered vertically
-          },
+          position: manualPos,
+          draggable: true, // Ensure node is draggable
           data: {
             ...node,
-            onExpand: toggleGroup,
             onFilter: handleFilterClick,
+            onExpand: node.type === 'collapsedGroup' ? toggleGroup : undefined,
           },
           style: {
-            width: 250,
-            boxShadow: '0 4px 10px rgba(0, 0, 0, 0.15)',
-            zIndex: 10,
-            opacity: highlightedNodes.size > 0 ? 0.6 : 1,
+            width: 190,
+            boxShadow: '0 3px 8px rgba(0, 0, 0, 0.1)',
+            transition: 'opacity 0.2s ease-in-out, filter 0.2s ease-in-out',
+            opacity: highlightedNodes.size > 0 && !highlightedNodes.has(node.id) ? 0.6 : 1,
+            filter: highlightedNodes.has(node.id) ? 'drop-shadow(0 0 10px rgba(66, 133, 244, 0.5))' : 'none',
+            zIndex: highlightedNodes.has(node.id) ? 10 : 0,
           },
         };
       }
-
-      // Get all nodes of this type to determine x-position
-      const sameTypeNodes = filteredNodes.filter(n => {
-        const nType = n.type === 'collapsedGroup' 
-          ? (n as CollapsedGroup).group 
-          : n.type;
-        return nType === nodeType && n.type !== 'collapsedGroup';
-      });
       
-      const nodeIndex = sameTypeNodes.findIndex(n => n.id === node.id);
+      // Get the node's depth in the graph (based on parent-child relationships)
+      const depth = nodeDepths.get(node.id) || 0;
       
-      // Special positioning for derived feature groups
-      const isDerivedFeatureGroup = 
-        nodeType === 'featureGroup' && 
-        (node.id === 'fg-4' || node.id === 'fg-5');
+      // For a more organic layout, position based on parents or depth
+      let xPosition, yPosition;
       
-      // Base horizontal position based on node type (columnar layout)
-      let xPosition = layerPositions[nodeType] || 0;
+      // Get parent nodes
+      const parentIds = parentsByNode.get(node.id) || [];
       
-      // Calculate vertical position (nodes stacked in columns)
-      let yPosition;
-      
-      // Create a map of positioned nodes for overlap detection
-      const positionedNodesMap = new Map();
-      filteredNodes.forEach(n => {
-        if (n.position && n.id !== node.id) {
-          positionedNodesMap.set(n.id, n.position);
-        }
-      });
-      
-      // Constants for spacing
-      const NODE_HEIGHT = 120; // Approximate height of a node
-      const VERTICAL_SPACING = 60; // Additional space between nodes
-      const MIN_VERTICAL_GAP = NODE_HEIGHT + VERTICAL_SPACING;
-      
-      // Initialize with basic vertical positioning based on index
-      yPosition = nodeIndex * MIN_VERTICAL_GAP;
-      
-      if (isDerivedFeatureGroup) {
-        // Find parent nodes for derived feature groups
-        const parentIds = [];
-        visibleEdges.forEach(edge => {
-          if (edge.target === node.id) {
-            parentIds.push(edge.source);
+      if (parentIds.length > 0) {
+        // If node has parents, position it relative to them
+        const parentPositions = [];
+        let parentCenterX = 0;
+        let parentCenterY = 0;
+        
+        parentIds.forEach(parentId => {
+          const parentNode = filteredNodes.find(n => n.id === parentId);
+          if (parentNode && parentNode.position) {
+            parentPositions.push(parentNode.position);
+            parentCenterX += parentNode.position.x;
+            parentCenterY += parentNode.position.y;
           }
         });
         
-        // Position derived feature groups to the right of their column to show derivation
-        xPosition += 80;
-        
-        // Try to position the derived feature group between its parents
-        if (parentIds.length > 0) {
-          const parentPositions = [];
+        if (parentPositions.length > 0) {
+          // Position to the right of the average parent position
+          parentCenterX /= parentPositions.length;
+          parentCenterY /= parentPositions.length;
           
-          parentIds.forEach(parentId => {
-            const parentNode = filteredNodes.find(n => n.id === parentId);
-            if (parentNode && parentNode.position) {
-              parentPositions.push(parentNode.position.y);
-            }
+          // Calculate exact grid column position based on parent depth
+          // Enforce strict ordering based on node type
+          const nodeTypeIndex = node.type === 'source' ? 0 : 
+                               node.type === 'featureGroup' ? 1 :
+                               node.type === 'featureView' ? 2 :
+                               node.type === 'trainingDataset' ? 3 :
+                               node.type === 'model' ? 4 : 5;
+          
+          // Position based on its proper place in the hierarchy
+          // This ensures correct left-to-right sequence regardless of parent positioning
+          xPosition = nodeTypeIndex * NODE_HORIZONTAL_DISTANCE;
+          
+          // Find all siblings (nodes with the same parents)
+          const siblings = filteredNodes.filter(n => {
+            const nParents = parentsByNode.get(n.id) || [];
+            return nParents.some(p => parentIds.includes(p));
           });
           
-          if (parentPositions.length > 0) {
-            // Position the derived node below its parents
-            yPosition = Math.max(...parentPositions) + MIN_VERTICAL_GAP;
-          }
-        }
-      } else {
-        // Base position for regular nodes
-        yPosition = nodeIndex * MIN_VERTICAL_GAP;
-      }
-      
-      // Check for overlaps with existing nodes in the same column
-      let hasOverlap = true;
-      let attempts = 0;
-      const maxAttempts = 10; // Prevent infinite loops
-      
-      while (hasOverlap && attempts < maxAttempts) {
-        hasOverlap = false;
-        
-        // Check all positioned nodes for overlaps
-        filteredNodes.forEach(otherNode => {
-          if (otherNode.id !== node.id && otherNode.position) {
-            // Only check nodes in same or adjacent columns (allow for derived nodes offset)
-            const otherType = otherNode.type === 'collapsedGroup' 
-              ? (otherNode as any).data.group 
-              : otherNode.type;
-              
-            const otherX = otherNode.position.x;
-            const otherY = otherNode.position.y;
-            
-            // Check if this node would overlap with any others
-            const horizontalOverlap = Math.abs(otherX - xPosition) <= 200;
-            const verticalOverlap = Math.abs(otherY - yPosition) < MIN_VERTICAL_GAP - 20;
-            
-            if (horizontalOverlap && verticalOverlap) {
-              // Move this node down to avoid overlap
-              yPosition = otherY + MIN_VERTICAL_GAP;
-              hasOverlap = true;
+          // Get index of this node among siblings
+          const siblingIndex = siblings.findIndex(n => n.id === node.id);
+          const totalSiblings = siblings.length;
+          
+          // Center siblings vertically relative to parent
+          // Calculate offset from center based on position in sibling group
+          const middleIndex = (totalSiblings - 1) / 2;
+          const offsetFromMiddle = siblingIndex - middleIndex;
+          
+          // Position node centered around parent's vertical position
+          yPosition = parentCenterY + offsetFromMiddle * GRID_SIZE * 2;
+          
+          // Snap to grid
+          xPosition = snapToGrid(xPosition);
+          yPosition = snapToGrid(yPosition);
+          
+          // For nodes with the same parents, spread them vertically
+          const nodesWithSameParents = filteredNodes.filter(n => {
+            const nParents = parentsByNode.get(n.id) || [];
+            // Same parent set check
+            return n.id !== node.id && 
+                  nParents.length === parentIds.length && 
+                  nParents.every(p => parentIds.includes(p));
+          });
+          
+          if (nodesWithSameParents.length > 0) {
+            // Add vertical offset to avoid overlap with siblings (grid-aligned)
+            const siblingIndex = nodesWithSameParents.findIndex(n => n.id === node.id);
+            if (siblingIndex >= 0) {
+              yPosition += siblingIndex * GRID_SIZE * 2;
+              // Re-snap to grid after adding offset
+              yPosition = snapToGrid(yPosition);
             }
           }
-        });
+        } else {
+          // Fallback if parent positions aren't found (grid-aligned)
+          xPosition = depth * NODE_HORIZONTAL_DISTANCE;
+          yPosition = (parseInt(node.id.split('-')[1]) || 0) * GRID_SIZE * 2;
+          
+          // Snap to grid
+          xPosition = snapToGrid(xPosition);
+          yPosition = snapToGrid(yPosition);
+        }
+      } else {
+        // For root nodes or nodes without parent positions, use grid-aligned placement
+        xPosition = depth * NODE_HORIZONTAL_DISTANCE;
         
-        attempts++;
+        // Arrange vertically by node type with consistent grid spacing
+        const typeIndex = node.type === 'source' ? 0 : 
+                         node.type === 'featureGroup' ? 1 :
+                         node.type === 'featureView' ? 2 :
+                         node.type === 'trainingDataset' ? 3 :
+                         node.type === 'model' ? 4 : 5;
+        
+        // Calculate vertical position with significant spacing between node types
+        // Enforce strict left-to-right order based on node type
+        // Source -> FeatureGroup -> FeatureView -> TrainingDataset -> Model -> Deployment
+        xPosition = typeIndex * NODE_HORIZONTAL_DISTANCE;
+        
+        // Vertical position based on type and then index
+        const sameTypeNodes = filteredNodes.filter(n => n.type === node.type);
+        const nodeIndex = sameTypeNodes.findIndex(n => n.id === node.id);
+        const totalSameType = sameTypeNodes.length;
+        
+        // Center nodes of same type vertically
+        const middleIndex = (totalSameType - 1) / 2;
+        const offsetFromMiddle = nodeIndex - middleIndex;
+        
+        // Position vertically centered with consistent spacing
+        yPosition = GRID_SIZE * 4 + offsetFromMiddle * GRID_SIZE * 2;
+        
+        // Snap to grid
+        xPosition = snapToGrid(xPosition);
+        yPosition = snapToGrid(yPosition);
+      }
+      
+      // Special handling for collapsed groups
+      if (node.type === 'collapsedGroup') {
+        // Position collapsed groups at fixed grid positions
+        const collapsedGroup = (node as CollapsedGroup).group;
+        
+        // Determine column based on node type
+        const typeIndex = collapsedGroup === 'source' ? 0 : 
+                         collapsedGroup === 'featureGroup' ? 1 :
+                         collapsedGroup === 'featureView' ? 2 :
+                         collapsedGroup === 'trainingDataset' ? 3 :
+                         collapsedGroup === 'model' ? 4 : 5;
+        
+        // Position collapsed groups in strict hierarchical order
+        // Enforce the correct sequence: Source -> FeatureGroup -> FeatureView -> TrainingDataset -> Model -> Deployment
+        xPosition = typeIndex * NODE_HORIZONTAL_DISTANCE;
+        
+        // Center vertically
+        yPosition = GRID_SIZE * 4;
+        
+        // Snap to grid
+        xPosition = snapToGrid(xPosition);
+        yPosition = snapToGrid(yPosition);
       }
       
       return {
@@ -450,12 +517,13 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
           x: xPosition, 
           y: yPosition 
         },
+        draggable: true, // Allow dragging for all nodes
         data: {
           ...node,
           onFilter: handleFilterClick,
         },
         style: {
-          width: 200,
+          width: 190,
           boxShadow: '0 3px 8px rgba(0, 0, 0, 0.1)',
           transition: 'opacity 0.2s ease-in-out, filter 0.2s ease-in-out',
           opacity: highlightedNodes.size > 0 && !highlightedNodes.has(node.id) ? 0.6 : 1,
@@ -464,7 +532,7 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
         },
       };
     });
-  }, [filteredNodes, visibleEdges, toggleGroup, handleFilterClick, highlightedNodes, layerPositions]);
+  }, [filteredNodes, visibleEdges, toggleGroup, handleFilterClick, highlightedNodes, manualPositions, NODE_HORIZONTAL_DISTANCE, NODE_VERTICAL_DISTANCE, GRID_SIZE, snapToGrid]);
   
   // Filter edges based on connection tracing and name filtering
   const filteredEdges = useMemo(() => {
@@ -529,12 +597,17 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
     });
   }, [filteredEdges, highlightedEdges]);
 
-  // Node interactions (we don't need mouse enter/leave since we'll use ReactFlow tooltips)
+  // Node interactions
   const handleNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
     // Let the onNodeClick handler work normally - no longer doing tracing here
     // Instead, let the filter button handle that
     onNodeClick?.(node);
   }, [onNodeClick]);
+  
+  // Clear manual positions, returning nodes to their algorithmic positions
+  const handleResetNodePositions = useCallback(() => {
+    setManualPositions({});
+  }, []);
 
   return (
     <div className={`provenance-graph-container ${(highlightedNodes.size > 0 || nameFilter || nodeTypeFilter) ? 'filtering-active' : ''}`}>
@@ -564,12 +637,34 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
           nameFilter={nameFilter}
           nodeTypeFilter={nodeTypeFilter}
         />
+        
+        {/* Reset node positions button in the control panel */}
+        <div className="position-controls">
+          <h3>Layout Controls</h3>
+          <button 
+            className="action-button"
+            onClick={handleResetNodePositions}
+            title="Reset node positions to automatic layout"
+          >
+            <span className="reset-positions-icon">↻</span> Reset Node Positions
+          </button>
+          <div className="control-info">
+            <p>You can drag nodes to position them manually</p>
+          </div>
+        </div>
       </div>
       
       {/* Floating reset button when any filtering is active */}
+      {/* Show filter reset button when filtering is active */}
       {(highlightedNodes.size > 0 || nameFilter || nodeTypeFilter) && (
         <button 
           className="reset-filter-button"
+          style={{
+            position: 'absolute',
+            top: '16px',
+            right: '16px',
+            zIndex: 1000,
+          }}
           onClick={() => {
             // Clear both connection tracing and name filtering
             setHighlightedNodeId(null);
@@ -584,6 +679,11 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
           Reset All Filters
         </button>
       )}
+      
+      {/* Show reset positions button when filtering is NOT active */}
+      {!(highlightedNodes.size > 0 || nameFilter || nodeTypeFilter) && (
+        <ResetPositionsButton />
+      )}
       <div className="flow-wrapper">
         <ReactFlow
           nodes={applyNodeHighlighting(layoutNodes)}
@@ -591,12 +691,18 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           onNodeClick={handleNodeClick}
+          onNodesChange={onNodesChange}
           fitView
           attributionPosition="bottom-right"
           connectionLineType={ConnectionLineType.Bezier}
-          defaultViewport={{ x: 50, y: 0, zoom: 0.75 }}
+          defaultViewport={{ x: 0, y: 0, zoom: 0.5 }}
+          snapToGrid={true}
+          snapGrid={[GRID_SIZE, GRID_SIZE]}
           minZoom={0.5}
           maxZoom={2.0}
+          panOnScroll={true}
+          selectionOnDrag={false}
+          panOnDrag={[1, 2]} // Enable panning with left and middle mouse buttons
         >
           <Controls />
           <MiniMap 
@@ -618,8 +724,8 @@ const ProvenanceGraphInner: React.FC<ProvenanceGraphProps> = ({
             pannable
           />
           <Background
-            variant="dots"
-            gap={16}
+            variant="grid"
+            gap={GRID_SIZE}
             size={1}
             color="rgba(0, 0, 0, 0.04)"
           />

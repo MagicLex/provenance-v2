@@ -34,10 +34,10 @@ const CustomEdge = ({
   // Generate a slightly different curvature for each edge to make flow more organic
   // Use the edge ID to create a deterministic random-like value
   const edgeIdHash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const randomFactor = (edgeIdHash % 100) / 300; // Small random factor
+  const randomFactor = (edgeIdHash % 100) / 400; // Even smaller random factor
 
-  // Increase the curvature for derived connections and add slight variation
-  const curvature = isDerivedConnection ? 0.5 + randomFactor : 0.25 + randomFactor;
+  // Use gentler curves for a more natural flow
+  const curvature = isDerivedConnection ? 0.3 + randomFactor : 0.15 + randomFactor;
   
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
@@ -123,8 +123,8 @@ const CustomEdge = ({
           label={`${count} connections`}
           labelStyle={{ fill: '#57606a', fontWeight: 500, fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace' }}
           labelBgStyle={{ fill: 'white', fillOpacity: 0.95, stroke: '#d0d7de', strokeWidth: 1 }}
-          labelBgPadding={[2, 5]}
-          labelBgBorderRadius={2}
+          labelBgPadding={[4, 10]}
+          labelBgBorderRadius={12}
         />
       )}
     </>

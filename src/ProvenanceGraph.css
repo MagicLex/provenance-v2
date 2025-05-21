@@ -32,13 +32,16 @@
   flex-grow: 1;
   height: 100%;
   position: relative;
+  background-image: radial-gradient(#f2f2f2 1px, transparent 1px);
+  background-size: 8px 8px;
+  background-color: #ffffff;
 }
 
 /* Node styling */
 .node {
   padding: 8px 10px;
   border-radius: 3px;
-  min-width: 180px;
+  min-width: 170px;
   background: white;
   border: 1px solid #d0d7de; /* GitHub-style border color */
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -50,7 +53,7 @@
 
 /* Highlight effect for traced connections */
 .react-flow__node.highlighted {
-  box-shadow: 0 0 0 1px #0969da, 0 0 3px rgba(9, 105, 218, 0.3);
+  box-shadow: 0 0 0 2px #0969da, 0 0 8px rgba(9, 105, 218, 0.4);
   z-index: 100;
   border-color: #0969da;
 }
@@ -132,11 +135,45 @@
 }
 
 /* Reset filter button */
-.reset-filter-button {
+.floating-controls {
   position: absolute;
   top: 16px;
   right: 16px;
   z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.position-controls {
+  display: flex;
+  flex-direction: column;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #d0d7de;
+}
+
+.position-controls h3 {
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: #24292f;
+  font-weight: 600;
+}
+
+.control-info {
+  margin-top: 10px;
+  padding: 8px;
+  background-color: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 2px;
+  font-size: 12px;
+  color: #57606a;
+  font-style: italic;
+}
+
+.reset-filter-button,
+.reset-positions-button {
   padding: 4px 10px;
   background-color: #f6f8fa;
   color: #0969da;
@@ -152,12 +189,14 @@
   gap: 6px;
 }
 
-.reset-filter-button:hover {
+.reset-filter-button:hover,
+.reset-positions-button:hover {
   background-color: #f3f4f6;
   border-color: #0969da;
 }
 
-.reset-filter-icon {
+.reset-filter-icon,
+.reset-positions-icon {
   font-size: 12px;
   color: #0969da;
 }
@@ -241,8 +280,8 @@
   border: 1px dashed #d0d7de;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
+  align-items: flex-start;
+  text-align: left;
 }
 
 .collapsed-source {
@@ -294,6 +333,7 @@
   font-size: 12px;
   font-weight: 500;
   transition: all 0.2s;
+  align-self: flex-start;
 }
 
 .expand-button:hover {
